@@ -12,18 +12,18 @@ import (
 
 const REPO = "https://api.github.com/repos/%s/%s/releases/latest"
 
-type assets []asset
-type release string
+type Assets []Asset
+type Release string
 
-type githubReposResponse struct {
-	Assets assets `json:"assets"`
+type GithubReposResponse struct {
+	Assets Assets `json:"assets"`
 }
 
-type asset struct {
-	BrowserDownloadURL release `json:"browser_download_url"`
+type Asset struct {
+	BrowserDownloadURL Release `json:"browser_download_url"`
 }
 
-func (a assets) GetReleaseFor(os OS, arch ARCH) (release, error) {
+func (a Assets) GetReleaseFor(os OS, arch ARCH) (Release, error) {
 	osAndArch, err := combineOSandArch(os, arch)
 	if err != nil {
 		return "", err
@@ -37,7 +37,7 @@ func (a assets) GetReleaseFor(os OS, arch ARCH) (release, error) {
 	return "", fmt.Errorf("not found")
 }
 
-func (r release) Download() (int64, io.ReadCloser, error) {
+func (r Release) Download() (int64, io.ReadCloser, error) {
 	req, err := http.NewRequest(http.MethodGet, string(r), http.NoBody)
 	if err != nil {
 		return 0, nil, err
@@ -52,7 +52,7 @@ func (r release) Download() (int64, io.ReadCloser, error) {
 	return res.ContentLength, res.Body, nil
 }
 
-func LatestTag(owner string, repo string) (*githubReposResponse, error) {
+func LatestTag(owner string, repo string) (*GithubReposResponse, error) {
 	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*30)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf(REPO, owner, repo), http.NoBody)
@@ -69,7 +69,7 @@ func LatestTag(owner string, repo string) (*githubReposResponse, error) {
 		return nil, err
 	}
 
-	var repoResponse githubReposResponse
+	var repoResponse GithubReposResponse
 	if err := json.Unmarshal(bytes, &repoResponse); err != nil {
 		return nil, err
 	}

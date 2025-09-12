@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/klauspost/compress/zip"
 	"github.com/vedadiyan/protov/internal/system/common"
 )
 
@@ -53,40 +52,6 @@ func exportEnv(protoPath string) error {
 	return nil
 }
 
-func unzip(path string, r io.ReaderAt, l int64) error {
-	reader, err := zip.NewReader(r, l)
-	if err != nil {
-		return err
-	}
-
-	for _, file := range reader.File {
-		destPath := filepath.Join(path, file.Name)
-		if file.FileInfo().IsDir() {
-			os.MkdirAll(destPath, file.FileInfo().Mode())
-			continue
-		}
-		os.MkdirAll(filepath.Dir(destPath), 0755)
-		rc, err := file.Open()
-		if err != nil {
-			return err
-		}
-		outFile, err := os.Create(destPath)
-		if err != nil {
-			return err
-		}
-		if _, err := io.Copy(outFile, rc); err != nil {
-			return err
-		}
-		if err := rc.Close(); err != nil {
-			return err
-		}
-		if err := outFile.Close(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func Install(progressChannel chan<- int) error {
 	repos, err := common.LatestTag("", "")
 	if err != nil {
@@ -125,7 +90,7 @@ func Install(progressChannel chan<- int) error {
 	if err := exportEnv(protoPath); err != nil {
 		return err
 	}
-	if err := unzip(protoPath, bytes.NewReader(buffer.Bytes()), l); err != nil {
+	if err := common.UnZipDump(protoPath, bytes.NewReader(buffer.Bytes()), l); err != nil {
 		return err
 	}
 	return nil
