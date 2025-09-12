@@ -2,11 +2,13 @@ package protoc
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/vedadiyan/protov/internal/system/common"
 )
@@ -30,7 +32,7 @@ func exportEnv(protoPath string) error {
 	if common.GetOS() == common.OS_WINDOWS {
 		cmd := exec.Command("setx", "PATH", fmt.Sprintf("%s;%s", currentPath, binPath)).Run()
 		if cmd.Error() != "" {
-			return fmt.Errorf(cmd.Error())
+			return errors.New(cmd.Error())
 		}
 		return nil
 	}
@@ -52,12 +54,67 @@ func exportEnv(protoPath string) error {
 	return nil
 }
 
+func getReleaseFor(assets common.Assets, os common.OS, arch common.ARCH) (common.Release, error) {
+	osAndArch, err := combineOSandArch(os, arch)
+	if err != nil {
+		return "", err
+	}
+	for _, i := range assets {
+		if strings.Contains(string(i.BrowserDownloadURL), osAndArch) {
+			return i.BrowserDownloadURL, nil
+		}
+	}
+
+	return "", fmt.Errorf("not found")
+}
+
+func combineOSandArch(os common.OS, arch common.ARCH) (string, error) {
+	switch os {
+	case common.OS_WINDOWS:
+		{
+			switch arch {
+			case common.ARCH_AMD64:
+				{
+					return "win64", nil
+				}
+			}
+		}
+	case common.OS_DARWIN:
+		{
+			switch arch {
+			case common.ARCH_AMD64:
+				{
+					return "osx-x86_64", nil
+				}
+			case common.ARCH_ARM64:
+				{
+					return "osx-aarch_64", nil
+				}
+			}
+		}
+	case common.OS_LINUX:
+		{
+			switch arch {
+			case common.ARCH_AMD64:
+				{
+					return "linux-x86_32", nil
+				}
+			case common.ARCH_ARM64:
+				{
+					return "linux-aarch_64", nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("%s-%s is not supported", os, arch)
+}
+
 func Install(progressChannel chan<- int) error {
 	repos, err := common.LatestTag("", "")
 	if err != nil {
 		return err
 	}
-	release, err := repos.Assets.GetReleaseFor(common.GetOS(), common.GetArch())
+	release, err := getReleaseFor(repos.Assets, common.GetOS(), common.GetArch())
 	if err != nil {
 		return err
 	}

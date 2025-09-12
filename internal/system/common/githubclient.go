@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -21,20 +20,6 @@ type GithubReposResponse struct {
 
 type Asset struct {
 	BrowserDownloadURL Release `json:"browser_download_url"`
-}
-
-func (a Assets) GetReleaseFor(os OS, arch ARCH) (Release, error) {
-	osAndArch, err := combineOSandArch(os, arch)
-	if err != nil {
-		return "", err
-	}
-	for _, i := range a {
-		if strings.Contains(string(i.BrowserDownloadURL), osAndArch) {
-			return i.BrowserDownloadURL, nil
-		}
-	}
-
-	return "", fmt.Errorf("not found")
 }
 
 func (r Release) Download() (int64, io.ReadCloser, error) {
@@ -75,45 +60,4 @@ func LatestTag(owner string, repo string) (*GithubReposResponse, error) {
 	}
 
 	return &repoResponse, nil
-}
-
-func combineOSandArch(os OS, arch ARCH) (string, error) {
-	switch os {
-	case OS_WINDOWS:
-		{
-			switch arch {
-			case ARCH_AMD64:
-				{
-					return "win64", nil
-				}
-			}
-		}
-	case OS_DARWIN:
-		{
-			switch arch {
-			case ARCH_AMD64:
-				{
-					return "osx-x86_64", nil
-				}
-			case ARCH_ARM64:
-				{
-					return "osx-aarch_64", nil
-				}
-			}
-		}
-	case OS_LINUX:
-		{
-			switch arch {
-			case ARCH_AMD64:
-				{
-					return "linux-x86_32", nil
-				}
-			case ARCH_ARM64:
-				{
-					return "linux-aarch_64", nil
-				}
-			}
-		}
-	}
-	return "", fmt.Errorf("%s-%s is not supported", os, arch)
 }
