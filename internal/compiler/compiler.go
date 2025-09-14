@@ -234,7 +234,7 @@ func GetKind(fieldDescriptor protoreflect.FieldDescriptor) string {
 		}
 	default:
 		{
-			return "interface {}"
+			return ""
 		}
 	}
 }
