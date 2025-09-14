@@ -118,10 +118,8 @@ func GetMessages(md protoreflect.MessageDescriptors) ([]*Message, error) {
 				return nil, err
 			}
 			out = append(out, messages...)
-
 		}
 	}
-
 	return out, nil
 }
 
@@ -140,7 +138,6 @@ func GetMessage(fd protoreflect.FieldDescriptors) (*Message, error) {
 		}
 		out.Fields[i] = field
 	}
-
 	return out, nil
 }
 
@@ -156,7 +153,6 @@ func GetKind(fieldDescriptor protoreflect.FieldDescriptor) reflect.Kind {
 	if fieldDescriptor.IsMap() {
 		return reflect.Map
 	}
-
 	flags := reflect.Kind(0)
 	if fieldDescriptor.HasOptionalKeyword() {
 		flags = reflect.Pointer
