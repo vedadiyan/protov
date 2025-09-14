@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"reflect"
 	"strings"
 
 	"github.com/bufbuild/protocompile"
@@ -24,7 +23,7 @@ type (
 	}
 	Field struct {
 		Field string
-		Type  reflect.Kind
+		Type  string
 		Tags  []string
 	}
 	Message struct {
@@ -149,93 +148,93 @@ func GetField(fieldDescriptor protoreflect.FieldDescriptor) (*Field, error) {
 	return out, nil
 }
 
-func GetKind(fieldDescriptor protoreflect.FieldDescriptor) reflect.Kind {
+func GetKind(fieldDescriptor protoreflect.FieldDescriptor) string {
 	if fieldDescriptor.IsMap() {
-		return reflect.Map
+		return fmt.Sprintf("map[%s]%s", GetKind(fieldDescriptor.MapKey()), GetKind(fieldDescriptor.MapValue()))
 	}
-	flags := reflect.Kind(0)
+	flags := ""
 	if fieldDescriptor.HasOptionalKeyword() {
-		flags = reflect.Pointer
+		flags = "*"
 	}
 	if fieldDescriptor.IsList() {
-		flags = reflect.Array
+		flags = "[]"
 	}
 	switch fieldDescriptor.Kind() {
 	case protoreflect.BoolKind:
 		{
-			return reflect.Bool | flags
+			return fmt.Sprintf("%s%s", flags, "bool")
 		}
 	case protoreflect.EnumKind:
 		{
-			panic("")
+			return fmt.Sprintf("%s%s", flags, fieldDescriptor.Enum().Name())
 		}
 	case protoreflect.Int32Kind:
 		{
-			return reflect.Int32 | flags
+			return fmt.Sprintf("%s%s", flags, "int")
 		}
 	case protoreflect.Sint32Kind:
 		{
-			return reflect.Int32 | flags
+			return fmt.Sprintf("%s%s", flags, "int")
 		}
 	case protoreflect.Uint32Kind:
 		{
-			return reflect.Uint32 | flags
+			return fmt.Sprintf("%s%s", flags, "uint")
 		}
 	case protoreflect.Int64Kind:
 		{
-			return reflect.Int64 | flags
+			return fmt.Sprintf("%s%s", flags, "int64")
 		}
 	case protoreflect.Sint64Kind:
 		{
-			return reflect.Int64 | flags
+			return fmt.Sprintf("%s%s", flags, "int64")
 		}
 	case protoreflect.Uint64Kind:
 		{
-			return reflect.Uint64 | flags
+			return fmt.Sprintf("%s%s", flags, "uint64")
 		}
 	case protoreflect.Sfixed32Kind:
 		{
-			return reflect.Int32 | flags
+			return fmt.Sprintf("%s%s", flags, "int")
 		}
 	case protoreflect.Fixed32Kind:
 		{
-			return reflect.Int32 | flags
+			return fmt.Sprintf("%s%s", flags, "int")
 		}
 	case protoreflect.FloatKind:
 		{
-			return reflect.Float32 | flags
+			return fmt.Sprintf("%s%s", flags, "float32")
 		}
 	case protoreflect.Sfixed64Kind:
 		{
-			return reflect.Int64 | flags
+			return fmt.Sprintf("%s%s", flags, "int64")
 		}
 	case protoreflect.Fixed64Kind:
 		{
-			return reflect.Int64 | flags
+			return fmt.Sprintf("%s%s", flags, "int64")
 		}
 	case protoreflect.DoubleKind:
 		{
-			return reflect.Float64 | flags
+			return fmt.Sprintf("%s%s", flags, "float64")
 		}
 	case protoreflect.StringKind:
 		{
-			return reflect.String | flags
+			return fmt.Sprintf("%s%s", flags, "string")
 		}
 	case protoreflect.BytesKind:
 		{
-			return reflect.Array | reflect.Uint8
+			return "[]byte"
 		}
 	case protoreflect.MessageKind:
 		{
-			return reflect.Interface | flags
+			return fmt.Sprintf("%s%s", flags, fieldDescriptor.Message().Name())
 		}
 	case protoreflect.GroupKind:
 		{
-			return reflect.Invalid
+			return "interfacce {}"
 		}
 	default:
 		{
-			return reflect.Invalid
+			return "interface {}"
 		}
 	}
 }
