@@ -17,7 +17,8 @@ import (
 )
 
 type (
-	Resolver struct {
+	Ignorables []string
+	Resolver   struct {
 		protocompile.SourceResolver
 		Dir string
 	}
@@ -26,11 +27,22 @@ type (
 		Type  string
 		Tags  []string
 	}
+	EnumValue struct {
+		Name   string
+		Number int
+	}
+	Enum struct {
+		Name   string
+		Values []*EnumValue
+	}
 	Message struct {
-		Fields []*Field
+		Name       string
+		Fields     []*Field
+		Ignorables Ignorables
 	}
 	File struct {
 		Messages []*Message
+		Enums    []*Enum
 	}
 	AST struct {
 		Files []*File
@@ -89,30 +101,40 @@ func Compile(file string) (*AST, error) {
 
 func GetFile(file linker.File) (*File, error) {
 	out := new(File)
-	messages, err := GetMessages(file.Messages())
+	messages, err := GetMessages(file.Messages(), nil)
 	if err != nil {
 		return nil, err
 	}
 	out.Messages = messages
+	enums, err := GetEnums(file.Enums())
+	if err != nil {
+		return nil, err
+	}
+	out.Enums = enums
 	return out, nil
 }
 
-func GetMessages(md protoreflect.MessageDescriptors) ([]*Message, error) {
+func GetMessages(md protoreflect.MessageDescriptors, ignoreList Ignorables) ([]*Message, error) {
 	l := md.Len()
 	if l == 0 {
 		return nil, nil
 	}
 	out := make([]*Message, 0)
+
 	for i := range l {
 		messageDescriptor := md.Get(i)
-		message, err := GetMessage(messageDescriptor.Fields())
+		name := messageDescriptor.Name()
+		if ignoreList.Contains(string(name)) {
+			continue
+		}
+		message, err := GetMessage(name, messageDescriptor.Fields())
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, message)
 		nestedMessagesLength := messageDescriptor.Messages().Len()
 		if nestedMessagesLength != 0 {
-			messages, err := GetMessages(messageDescriptor.Messages())
+			messages, err := GetMessages(messageDescriptor.Messages(), message.Ignorables)
 			if err != nil {
 				return nil, err
 			}
@@ -122,13 +144,15 @@ func GetMessages(md protoreflect.MessageDescriptors) ([]*Message, error) {
 	return out, nil
 }
 
-func GetMessage(fd protoreflect.FieldDescriptors) (*Message, error) {
+func GetMessage(name protoreflect.Name, fd protoreflect.FieldDescriptors) (*Message, error) {
 	out := new(Message)
 	l := fd.Len()
 	if l == 0 {
 		return out, nil
 	}
+	out.Name = string(name)
 	out.Fields = make([]*Field, l)
+	out.Ignorables = make([]string, 0)
 	for i := range l {
 		fieldDescriptor := fd.Get(i)
 		field, err := GetField(fieldDescriptor)
@@ -136,6 +160,9 @@ func GetMessage(fd protoreflect.FieldDescriptors) (*Message, error) {
 			return nil, err
 		}
 		out.Fields[i] = field
+		if ok, value := CanBeIgnored(fieldDescriptor); ok {
+			out.Ignorables = append(out.Ignorables, value)
+		}
 	}
 	return out, nil
 }
@@ -146,6 +173,49 @@ func GetField(fieldDescriptor protoreflect.FieldDescriptor) (*Field, error) {
 	out.Type = GetKind(fieldDescriptor)
 	out.Tags = GetTags(fieldDescriptor)
 	return out, nil
+}
+
+func GetEnums(md protoreflect.EnumDescriptors) ([]*Enum, error) {
+	l := md.Len()
+	if l == 0 {
+		return nil, nil
+	}
+	out := make([]*Enum, 0)
+	for i := range l {
+		enumDescriptor := md.Get(i)
+		message, err := GetEnum(enumDescriptor.Name(), enumDescriptor.Values())
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, message)
+	}
+	return out, nil
+}
+
+func GetEnum(name protoreflect.Name, ed protoreflect.EnumValueDescriptors) (*Enum, error) {
+	out := new(Enum)
+	l := ed.Len()
+	if l == 0 {
+		return nil, nil
+	}
+	out.Name = string(name)
+	enumValues := make([]*EnumValue, l)
+	for i := range l {
+		enumValueDescriptor := ed.Get(i)
+		enumValue := new(EnumValue)
+		enumValue.Name = string(enumValueDescriptor.Name())
+		enumValue.Number = int(enumValueDescriptor.Number())
+		enumValues = append(enumValues, enumValue)
+	}
+	out.Values = enumValues
+	return out, nil
+}
+
+func CanBeIgnored(fieldDescriptor protoreflect.FieldDescriptor) (bool, string) {
+	if fieldDescriptor.IsMap() {
+		return true, string(fieldDescriptor.Message().Name())
+	}
+	return false, ""
 }
 
 func GetKind(fieldDescriptor protoreflect.FieldDescriptor) string {
@@ -253,4 +323,13 @@ func GetTags(fieldDescriptor protoreflect.FieldDescriptor) []string {
 		return true
 	})
 	return out
+}
+
+func (i Ignorables) Contains(value string) bool {
+	for _, v := range i {
+		if v == value {
+			return true
+		}
+	}
+	return false
 }
