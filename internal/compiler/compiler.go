@@ -39,9 +39,10 @@ type (
 		Dir string
 	}
 	Field struct {
-		Field string
-		Type  string
-		Tags  []string
+		Field         string
+		Type          string
+		Tags          []string
+		MarshalledTag string
 	}
 	EnumValue struct {
 		Name   string
@@ -188,6 +189,7 @@ func GetField(fieldDescriptor protoreflect.FieldDescriptor) (*Field, error) {
 	out.Field = string(fieldDescriptor.FullName().Name())
 	out.Type = GetKind(fieldDescriptor)
 	out.Tags = GetTags(fieldDescriptor)
+	out.MarshalledTag = MarshallTags(fieldDescriptor)
 	return out, nil
 }
 
@@ -350,7 +352,35 @@ func (i Ignorables) Contains(value string) bool {
 	return false
 }
 
-func Marshal(fd protoreflect.FieldDescriptor, enumName string) string {
+func MarshallTags(fd protoreflect.FieldDescriptor) string {
+	var buffer bytes.Buffer
+	buffer.WriteString("protobuf:")
+	buffer.WriteRune('"')
+	buffer.WriteString(marshallTags(fd, false))
+	buffer.WriteRune('"')
+	if fd.HasJSONName() {
+		buffer.WriteString(" ")
+		buffer.WriteString("json:")
+		buffer.WriteRune('"')
+		buffer.WriteString(fd.JSONName())
+		buffer.WriteRune('"')
+	}
+	if fd.IsMap() {
+		buffer.WriteString(" ")
+		buffer.WriteString("protobuf_key:")
+		buffer.WriteRune('"')
+		buffer.WriteString(marshallTags(fd.MapKey(), true))
+		buffer.WriteRune('"')
+		buffer.WriteString(" ")
+		buffer.WriteString("protobuf_val:")
+		buffer.WriteRune('"')
+		buffer.WriteString(marshallTags(fd.MapValue(), true))
+		buffer.WriteRune('"')
+	}
+	return buffer.String()
+}
+
+func marshallTags(fd protoreflect.FieldDescriptor, skipSyntax bool) string {
 	var tag []string
 	switch fd.Kind() {
 	case protoreflect.BoolKind, protoreflect.EnumKind, protoreflect.Int32Kind, protoreflect.Uint32Kind, protoreflect.Int64Kind, protoreflect.Uint64Kind:
@@ -396,24 +426,24 @@ func Marshal(fd protoreflect.FieldDescriptor, enumName string) string {
 	// The previous implementation does not tag extension fields as proto3,
 	// even when the field is defined in a proto3 file. Match that behavior
 	// for consistency.
-	if fd.Syntax() == protoreflect.Proto3 && !fd.IsExtension() {
+	if !skipSyntax && fd.Syntax() == protoreflect.Proto3 && !fd.IsExtension() {
 		tag = append(tag, "proto3")
 	}
-	if fd.Kind() == protoreflect.EnumKind && enumName != "" {
-		tag = append(tag, "enum="+enumName)
+	if fd.Kind() == protoreflect.EnumKind {
+		tag = append(tag, "enum="+string(fd.Enum().FullName()))
 	}
 	if fd.ContainingOneof() != nil {
 		tag = append(tag, "oneof")
 	}
 	// This must appear last in the tag, since commas in strings aren't escaped.
 	if fd.HasDefault() {
-		def, _ := DefValMarshal(fd.Default(), fd.DefaultEnumValue(), fd.Kind(), GoTag)
+		def, _ := marshallDefaultValue(fd.Default(), fd.DefaultEnumValue(), fd.Kind(), GoTag)
 		tag = append(tag, "def="+def)
 	}
 	return strings.Join(tag, ",")
 }
 
-func DefValMarshal(v protoreflect.Value, ev protoreflect.EnumValueDescriptor, k protoreflect.Kind, f Format) (string, error) {
+func marshallDefaultValue(v protoreflect.Value, ev protoreflect.EnumValueDescriptor, k protoreflect.Kind, f Format) (string, error) {
 	switch k {
 	case protoreflect.BoolKind:
 		if f == GoTag {
