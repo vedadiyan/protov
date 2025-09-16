@@ -1,0 +1,7 @@
+{{- define "Message"}}
+type {{.Name}} struct {
+    {{- range $field := .Fields }}
+    {{ $field.Field }} {{ $field.Type }} `{{- $field.MarshalledTag }}`
+    {{- end }} 
+}
+{{- end}}
