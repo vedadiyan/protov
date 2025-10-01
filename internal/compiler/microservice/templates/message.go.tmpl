@@ -5,7 +5,7 @@ type {{.Name}} struct {
     {{- end }} 
 }
 
-func (x *{{.Name}}) New() *{{.Name}} {
+func (x *{{.Name}}) New() protolizer.Reflected {
     return new({{.Name}})
 }
 
