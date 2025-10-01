@@ -346,7 +346,7 @@ func GetKind(fieldDescriptor protoreflect.FieldDescriptor) string {
 		}
 	case protoreflect.MessageKind:
 		{
-			return fmt.Sprintf("%s%s", flags, fieldDescriptor.Message().Name())
+			return fmt.Sprintf("*%s", fieldDescriptor.Message().Name())
 		}
 	case protoreflect.GroupKind:
 		{
