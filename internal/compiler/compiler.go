@@ -579,7 +579,7 @@ func GetReflectedKind(k protoreflect.Kind) reflect.Kind {
 		}
 	case protoreflect.Int64Kind:
 		{
-			return reflect.Uint64
+			return reflect.Int64
 		}
 	case protoreflect.Sint64Kind:
 		{

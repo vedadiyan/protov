@@ -5,6 +5,10 @@ type {{.Name}} struct {
     {{- end }} 
 }
 
+func (x *{{.Name}}) New() *{{.Name}} {
+    return new({{.Name}})
+}
+
 func (x *{{.Name}}) Type() protolizer.Type {
     return *protolizer.CaptureTypeByName("{{.TypeName}}")
 }
@@ -299,6 +303,367 @@ func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error 
 
             }
         {{- end }}        
+        default: {
+            return fmt.Errorf("invalid field")
+        }
     }    
 } 
+
+func (x *{{.Name}}) Decode(field *protolizer.Field, buffer *bytes.Buffer) error {
+    switch field.Tags.Protobuf.FieldNum {
+        {{- range $field := .Fields}}
+            case {{ $field.FieldNum }}: {
+                {{- if eq $field.Kind 1}}
+                    value, err := protolizer.BooleanDecoder(field, buffer)
+                     if err != nil {
+                        return err
+                    } 
+                    x.{{$field.Name}} = {{- if eq $field.Optional true}}&{{end}}value
+                {{- else if or (eq $field.Kind 2) (eq $field.Kind 3) (eq $field.Kind 4) (eq $field.Kind 5) (eq $field.Kind 6) }} 
+                    value, err := protolizer.SignedNumberDecoder(field, buffer)
+                     if err != nil {
+                        return err
+                    } 
+                    x.{{$field.Name}} = {{- if eq $field.Optional true}}&{{end}}value
+                {{- else if or (eq $field.Kind 7) (eq $field.Kind 8) (eq $field.Kind 9) (eq $field.Kind 10) (eq $field.Kind 11) }} 
+                    value, err := protolizer.UnsignedNumberDecoder(field, buffer)
+                     if err != nil {
+                        return err
+                    } 
+                    x.{{$field.Name}} = {{- if eq $field.Optional true}}&{{end}}value
+                {{- else if eq $field.Kind 13}} 
+                    value, err := protolizer.FloatDecoder(field, buffer)
+                     if err != nil {
+                        return err
+                    } 
+                    x.{{$field.Name}} = {{- if eq $field.Optional true}}&{{end}}value
+                {{- else if eq $field.Kind 14}} 
+                    value, err := protolizer.DoubleDecoder(field, buffer)
+                     if err != nil {
+                        return err
+                    } 
+                {{- else if eq $field.Kind 17}} 
+                    {{- if eq $field.Index 8}}
+                        bytes, err := protolizer.BytesDecode(buffer)
+                        if err != nil {
+                            return err
+                        }
+                        x.{{$field.Name}} = bytes
+                    {{- else if or eq $field.kind 1}}
+                        bytes, err := protolizer.BytesDecode(buffer)
+                        if err != nil {
+                            return err
+                        }
+                        innerBuffer := protolizer.Alloc(0)
+                        innerBuffer.Write(bytes)
+                        defer protolizer.Dealloc(innerBuffer)
+                        for innerBuffer.Len() != 0 {
+                            value, err := protolizer.BooleanDecoder(f, innerBuffer, protolizer.WireTypeVarint)
+                            if err != nil {
+                                return err
+                            }
+                            x.{{$field.Name}} = append(x.{{$field.Name}}, {{$field.Type}}(value))
+                        }
+                        return nil
+                    {{- else if or (eq $field.Kind 2) (eq $field.Kind 3) (eq $field.Kind 4) (eq $field.Kind 5) (eq $field.Kind 6) }}
+                        bytes, err := protolizer.BytesDecode(buffer)
+                        if err != nil {
+                            return err
+                        }
+                        innerBuffer := protolizer.Alloc(0)
+                        innerBuffer.Write(bytes)
+                        defer protolizer.Dealloc(innerBuffer)
+                        for innerBuffer.Len() != 0 {
+                            value, err := protolizer.SignedNumberDecoder(f, innerBuffer, protolizer.WireTypeVarint)
+                            if err != nil {
+                                return err
+                            }
+                            x.{{$field.Name}} = append(x.{{$field.Name}}, {{$field.Type}}(value))
+                        }
+                        return nil
+                    {{- else if or eq ($field.Kind 7) (eq $field.Kind 9) (eq $field.Kind 10) (eq $field.Kind 11) }}
+                        bytes, err := protolizer.BytesDecode(buffer)
+                        if err != nil {
+                            return err
+                        }
+                        innerBuffer := protolizer.Alloc(0)
+                        innerBuffer.Write(bytes)
+                        defer protolizer.Dealloc(innerBuffer)
+                        for innerBuffer.Len() != 0 {
+                            value, err := protolizer.UnsignedNumberDecoder(f, innerBuffer, protolizer.WireTypeVarint)
+                            if err != nil {
+                                return err
+                            }
+                            x.{{$field.Name}} = append(x.{{$field.Name}}, {{$field.Type}}(value))
+                        }
+                        return nil
+                    {{- else if eq $field.Kind 13 }}
+                        bytes, err := protolizer.BytesDecode(buffer)
+                        if err != nil {
+                            return err
+                        }
+                        innerBuffer := protolizer.Alloc(0)
+                        innerBuffer.Write(bytes)
+                        defer protolizer.Dealloc(innerBuffer)
+                        for innerBuffer.Len() != 0 {
+                            value, err := protolizer.FloatDecoder(f, innerBuffer, protolizer.WireTypeVarint)
+                            if err != nil {
+                                return err
+                            }
+                            x.{{$field.Name}} = append(x.{{$field.Name}}, {{$field.Type}}(value))
+                        }
+                        return nil
+                    {{- else if eq $field.Kind 14 }}
+                        bytes, err := protolizer.BytesDecode(buffer)
+                        if err != nil {
+                            return err
+                        }
+                        innerBuffer := protolizer.Alloc(0)
+                        innerBuffer.Write(bytes)
+                        defer protolizer.Dealloc(innerBuffer)
+                        for innerBuffer.Len() != 0 {
+                            value, err := protolizer.DoubleDecoder(f, innerBuffer, protolizer.WireTypeVarint)
+                            if err != nil {
+                                return err
+                            }
+                            x.{{$field.Name}} = append(x.{{$field.Name}}, {{$field.Type}}(value))
+                        }
+                        return nil
+                    {{- else if eq $field.Kind 24 }}
+                        i := 0
+                        for {
+                            if i != 0 {
+                                i, _, read, err := protolizer.TagPeek(buffer)
+                                if err != nil {
+                                    if err == io.EOF {
+                                        return nil
+                                    }
+                                    return err
+                                }
+                                if i != int32(field.Tags.Protobuf.FieldNum) {
+                                    break
+                                }
+                                read()
+                            }
+                            i++
+                            value, err := protolizer.StringDecode(buffer)
+                            if err != nil {
+                                return nil
+                            }
+                            x.{{$field.Name}} = append(x.{{$field.Name}}, {{$field.Type}}(value))
+                        }
+                        return nil
+                    {{- else if eq $field.Kind 25 }}
+                        i := 0
+                        for {
+                            if i != 0 {
+                                i, _, read, err := protolizer.TagPeek(buffer)
+                                if err != nil {
+                                    if err == io.EOF {
+                                        return nil
+                                    }
+                                    return err
+                                }
+                                if i != int32(field.Tags.Protobuf.FieldNum) {
+                                    break
+                                }
+                                read()
+                            }
+                            i++
+                            data, err := protolizer.BytesDecode(buffer)
+                            if err != nil {
+                                return err
+                            }
+                            bytes := protolizer.Alloc(0)
+                            var value {{$field.Type}}
+                            bytes.Write(data)
+                            err = protolizer.FastUnmarshal(&value, data)
+                            protolizer.Dealloc(bytes)
+                            if err != nil {
+                                return nil
+                            }
+                            x.{{$field.Name}} = append(x.{{$field.Name}}, {{$field.Type}}(value))
+                        }
+                        return nil
+                    {{- else }}
+                        return fmt.Errorf("unsupported index type %T", x.{{$field.Name}})
+                    {{- end }}
+                {{- else if eq $field.Kind 21}}
+                   c.Metadata = make(map[string]string)
+                    i := 0
+                    for {
+                        if i != 0 {
+                            i, _, read, err := protolizer.TagPeek(buffer)
+                            if err != nil {
+                                if err == io.EOF {
+                                    return nil
+                                }
+                                return err
+                            }
+                            if i != int32(field.Tags.Protobuf.FieldNum) {
+                                break
+                            }
+                            read()
+                        }
+                        i++
+                        bytes, err := protolizer.BytesDecode(buffer)
+                        if err != nil {
+                            return nil
+                        }
+                        innerBuffer := protolizer.Alloc(0)
+                        innerBuffer.Write(bytes)
+                        _, _, err := protolizer.TagDecode(innerBuffer)
+                        if err != nil {
+                            protolizer.Dealloc(innerBuffer)
+                            return err
+                        }
+     
+                       {{- if or eq $field.Key eq 1}}
+                            key, err := protolizer.BooleanDecoder(field, buffer)
+                            if err != nil {
+                                return err
+                            }
+                        {{- else if or (eq $field.Key 2) (eq $field.Key 3) (eq $field.Key 4) (eq $field.Key 5) (eq $field.Key 6) }}
+                            key, err := protolizer.SignedNumberDecoder(field, buffer)
+                            if err != nil {
+                                return err
+                            }
+                        {{- else if or (eq $field.Key 7) (eq $field.Key 8) (eq $field.Key 9) (eq $field.Key 10) (eq $field.Key 11) }}
+                            key, err := protolizer.UnsignedNumberDecoder(field, buffer)
+                            if err != nil {
+                                return err
+                            }
+                        {{- else if or eq $field.Key eq 13}}
+                            key, err := protolizer.FloatDecoder(field, buffer)
+                            if err != nil {
+                                return err
+                            }    
+                        {{- else if or eq $field.Key eq 14}}
+                            key, err := protolizer.DoubleDecoder(field, buffer)
+                            if err != nil {
+                                return err
+                            }     
+                        {{- else if or eq $field.Key eq 24}}
+                            key, err := protolizer.StringDecoder(field, buffer)
+                            if err != nil {
+                                return err
+                            }            
+                        {{- else }}
+                            return fmt.Errorf("unsupported key type %T", key})
+                        {{- end }}
+
+                        
+                        _, _, err := protolizer.TagDecode(innerBuffer)
+                        if err != nil {
+                            protolizer.Dealloc(innerBuffer)
+                            return err
+                        }
+
+                        {{- if or eq $field.ValueTag eq 1}}
+                            value, err := protolizer.BooleanDecoder(field, buffer)
+                            if err != nil {
+                                return err
+                            }
+                        {{- else if or (eq $field.Key 2) (eq $field.Key 3) (eq $field.Key 4) (eq $field.Key 5) (eq $field.Key 6) }}
+                            value, err := protolizer.SignedNumberDecoder(field, buffer)
+                            if err != nil {
+                                return err
+                            }
+                        {{- else if or (eq $field.Key 7) (eq $field.Key 8) (eq $field.Key 9) (eq $field.Key 10) (eq $field.Key 11) }}
+                            value, err := protolizer.UnsignedNumberDecoder(field, buffer)
+                            if err != nil {
+                                return err
+                            }
+                        {{- else if or eq $field.Value eq 13}}
+                            value, err := protolizer.FloatDecoder(field, buffer)
+                            if err != nil {
+                                return err
+                            }    
+                        {{- else if or eq $field.Value eq 14}}
+                            value, err := protolizer.DoubleDecoder(field, buffer)
+                            if err != nil {
+                                return err
+                            }     
+                        {{- else if or eq $field.Value eq 24}}
+                            value, err := protolizer.StringDecoder(field, buffer)
+                            if err != nil {
+                                return err
+                            }  
+                        {{- else if or eq $field.Value eq 25}}
+                            data, err := protolizer.BytesDecode(field, buffer)
+                            if err != nil {
+                                return err
+                            }
+                            var value {{$field.Type}}
+                            err = protolizer.FastUnmarshal(&value, data)
+                            if err != nil {
+                                return err
+                            }  
+                        {{- else }}
+                            return fmt.Errorf("unsupported value type %T", value})
+                        {{- end }}
+                        c.Metadata[{{$field.Type}}(key)] = {{$field.Type}}(value)
+                        protolizer.Dealloc(innerBuffer)
+
+                {{- else if eq $field.Kind 24}}
+                    value, err := protolizer.StringDecoder(field, buffer)
+                     if err != nil {
+                        return err
+                    } 
+                    x.{{$field.Name}} = {{- if eq $field.Optional true}}&{{end}}value
+                {{- else if eq $field.Kind 25}}
+                    var value {{$field.Type}}
+                    bytes, err := protolizer.DecodeBytes(field, buffer)
+                    if err != nil {
+                        return err
+                    }
+                    err = protolizer.FastUnmarshal(&value, bytes)
+                     if err != nil {
+                        return err
+                    }     
+                    x.{{$field.Name}} = {{- if eq $field.Optional true}}&{{end}}value    
+                {{- else }}
+                    return fmt.Errorf("unsupported field type %T", key})
+                {{- end }}
+            }
+        {{- end }}   
+        default: {
+                return fmt.Errorf("invalid field")
+        }     
+    }    
+} 
+
+func (x *{{.Name}}) IsZero(field *protolizer.Field) bool {
+    switch field.Tags.Protobuf.FieldNum {
+        {{- range $field := .Fields}}
+            case {{ $field.FieldNum }}: {
+                {{- if eq $field.Kind 1}}
+                    return {{if eq $field.Optional true}}*{{end}}x.{{$field.Name}} == false
+                {{- else if or (eq $field.Kind 2) (eq $field.Kind 3) (eq $field.Kind 4) (eq $field.Kind 5) (eq $field.Kind 6) }} 
+                    return {{if eq $field.Optional true}}x.{{$field.Name}} == nil {{else}} x.{{$field.Name}} == 0{{end}}
+                {{- else if or (eq $field.Kind 7) (eq $field.Kind 8) (eq $field.Kind 9) (eq $field.Kind 10) (eq $field.Kind 11) }} 
+                    return {{if eq $field.Optional true}}x.{{$field.Name}} == nil {{else}} x.{{$field.Name}} == 0{{end}}
+                {{- else if eq $field.Kind 13}} 
+                    return {{if eq $field.Optional true}}x.{{$field.Name}} == nil {{else}} x.{{$field.Name}} == 0{{end}}
+                {{- else if eq $field.Kind 14}} 
+                    return {{if eq $field.Optional true}}x.{{$field.Name}} == nil {{else}} x.{{$field.Name}} == 0{{end}}
+                {{- else if eq $field.Kind 17}} 
+                    return {{$field.Name}} == nil
+                {{- else if eq $field.Kind 21}}
+                    return {{$field.Name}} == nil
+                {{- else if eq $field.Kind 24}}
+                    return {{if eq $field.Optional true}}x.{{$field.Name}} == nil {{else}} len(x.{{$field.Name}}) == 0{{end}}
+                {{- else if eq $field.Kind 25}}
+                    {{if eq $field.Optional true}}return x.{{$field.Name}} == nil {{else}}return false {{end}}
+                {{- else }}
+                    return true
+                {{- end }}
+            }
+        {{- end }}   
+        default: {
+           return true
+        }     
+    }    
+} 
+
 {{- end}}
