@@ -3,6 +3,7 @@ package compiler
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"math"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/bufbuild/protocompile"
 	"github.com/bufbuild/protocompile/linker"
+	"github.com/bufbuild/protocompile/protoutil"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -56,6 +59,7 @@ type (
 		Name       string
 		Fields     []*Field
 		Ignorables Ignorables
+		Descriptor string
 	}
 	File struct {
 		Messages []*Message
@@ -148,6 +152,13 @@ func GetMessages(md protoreflect.MessageDescriptors, ignoreList Ignorables) ([]*
 		if err != nil {
 			return nil, err
 		}
+		xxx := protoutil.ProtoFromMessageDescriptor(messageDescriptor)
+		zzz, err := protojson.Marshal(xxx)
+		if err != nil {
+			return nil, err
+		}
+		message.Descriptor = base64.StdEncoding.EncodeToString(zzz)
+
 		out = append(out, message)
 		nestedMessagesLength := messageDescriptor.Messages().Len()
 		if nestedMessagesLength != 0 {
