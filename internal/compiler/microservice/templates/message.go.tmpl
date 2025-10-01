@@ -1,39 +1,41 @@
 {{- define "Message"}}
 type {{.Name}} struct {
-    state         protoimpl.MessageState `protogen:"open.v1"`
     {{- range $field := .Fields }}
-    {{ $field.Field }} {{ $field.Type }} `{{- $field.MarshalledTag }}`
+    {{ $field.Name }} {{ $field.Type }} `{{- $field.MarshalledTag }}`
     {{- end }} 
-    unknownFields protoimpl.UnknownFields
-    sizeCache     protoimpl.SizeCache
 }
 
 func (x *{{.Name}}) Type() protolizer.Type {
-    return protolizer.CaptureTypeByName("{{.TypeName}}")
+    return *protolizer.CaptureTypeByName("{{.TypeName}}")
 }
 
-func (x *{{.Name}}) Encode(field *protolizer.Type, buffer *bytes.Buffer) error {
-    switch field.FieldNumber {
+func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error {
+    switch field.Tags.Protobuf.FieldNum {
         {{- range $field := .Fields}}
-            case {{ $field.Tags.Protobuf.FieldNum }}: {
+            case {{ $field.FieldNum }}: {
+                {{- if eq $field.Optional true }}
+                    if x.{{$field.Name}} == nil {
+                        return nil
+                    }
+                {{- end }}
                 {{- if eq $field.Kind 1}}
-                    data, err := protolizer.BooleanEncoder(c.{{$field.Name}}, field, field.Tags.Protobuf.WireType)
+                    data, err := protolizer.BooleanEncoder({{if eq $field.Optional true}}*{{end}}x.{{$field.Name}}, field)
                     defer protolizer.Dealloc(data)
                     if err != nil {
                         return err
                     }
                     data.WriteTo(buffer)
                     return nil
-                {{- else if or eq $field.Kind 2 eq $field.Kind 3 $field.Kind 4 $field.Kind 5 $field.Kind 6}} 
-                    data, err := protolizer.SignedNumberEncoder(int64(c.{{$field.Name}}), field, field.Tags.Protobuf.WireType)
+                {{- else if or (eq $field.Kind 2) (eq $field.Kind 3) (eq $field.Kind 4) (eq $field.Kind 5) (eq $field.Kind 6) }} 
+                    data, err := protolizer.SignedNumberEncoder(int64({{if eq $field.Optional true}}*{{end}}x.{{$field.Name}}), field)
                     defer protolizer.Dealloc(data)
                     if err != nil {
                         return err
                     }
                     data.WriteTo(buffer)
                     return nil
-                {{- else if or eq $field.Kind 7 eq $field.Kind 8 $field.Kind 9 $field.Kind 10 $field.Kind 11}} 
-                    data, err := protolizer.UnsignedNumberEncoder(uint64(c.{{$field.Name}}), field, field.Tags.Protobuf.WireType)
+                {{- else if or (eq $field.Kind 7) (eq $field.Kind 8) (eq $field.Kind 9) (eq $field.Kind 10) (eq $field.Kind 11) }} 
+                    data, err := protolizer.UnsignedNumberEncoder(uint64({{if eq $field.Optional true}}*{{end}}x.{{$field.Name}}), field)
                     defer protolizer.Dealloc(data)
                     if err != nil {
                         return err
@@ -41,7 +43,7 @@ func (x *{{.Name}}) Encode(field *protolizer.Type, buffer *bytes.Buffer) error {
                     data.WriteTo(buffer)
                     return nil
                 {{- else if eq $field.Kind 13}} 
-                    data, err := protolizer.FloatEncoder(int64(c.{{$field.Name}}), field, field.Tags.Protobuf.WireType)
+                    data, err := protolizer.FloatEncoder(int64({{if eq $field.Optional true}}*{{end}}x.{{$field.Name}}), field)
                     defer protolizer.Dealloc(data)
                     if err != nil {
                         return err
@@ -49,7 +51,7 @@ func (x *{{.Name}}) Encode(field *protolizer.Type, buffer *bytes.Buffer) error {
                     data.WriteTo(buffer)
                     return nil 
                 {{- else if eq $field.Kind 14}} 
-                    data, err := protolizer.DoubleEncoder(int64(c.{{$field.Name}}), field, field.Tags.Protobuf.WireType)
+                    data, err := protolizer.DoubleEncoder(int64({{if eq $field.Optional true}}*{{end}}x.{{$field.Name}}), field)
                     defer protolizer.Dealloc(data)
                     if err != nil {
                         return err
@@ -58,7 +60,7 @@ func (x *{{.Name}}) Encode(field *protolizer.Type, buffer *bytes.Buffer) error {
                     return nil 
                 {{- else if eq $field.Kind 17}} 
                     {{- if eq $field.Index 8}}
-                        data, err := protolizer.EncodeBytes(int64(c.{{$field.Name}}), field, field.Tags.Protobuf.WireType)
+                        data, err := protolizer.EncodeBytes(int64({{if eq $field.Optional true}}*{{end}}x.{{$field.Name}}), field)
                         defer protolizer.Dealloc(data)
                         if err != nil {
                             return err
@@ -68,8 +70,8 @@ func (x *{{.Name}}) Encode(field *protolizer.Type, buffer *bytes.Buffer) error {
                     {{- else if or eq $field.kind 1}}
                         innerBuffer := protolizer.Alloc(0)
                         defer protolizer.Dealloc(innerBuffer)
-                        for _, value := range c.{{$field.Name}} {
-                            data, err := protolizer.BooleanEncoder(value, field, protolizer.WireTypeVarint)
+                        for _, value := range x.{{$field.Name}} {
+                            data, err := protolizer.BooleanEncoder(value, field)
                             if err != nil {
                                 return err
                             }
@@ -80,11 +82,11 @@ func (x *{{.Name}}) Encode(field *protolizer.Type, buffer *bytes.Buffer) error {
                         bytes.WriteTo(buffer)
                         protolizer.Dealloc(bytes)
                         return nil
-                    {{- else if or eq $field.Kind 2 eq $field.Kind 3 $field.Kind 4 $field.Kind 5 $field.Kind 6}}
+                    {{- else if or (eq $field.Kind 2) (eq $field.Kind 3) (eq $field.Kind 4) (eq $field.Kind 5) (eq $field.Kind 6) }}
                         innerBuffer := protolizer.Alloc(0)
                         defer protolizer.Dealloc(innerBuffer)
-                        for _, value := range c.{{$field.Name}} {
-                            data, err := protolizer.SignedNumberEncoder(int64(value), field, protolizer.WireTypeVarint)
+                        for _, value := range x.{{$field.Name}} {
+                            data, err := protolizer.SignedNumberEncoder(int64(value), field)
                             if err != nil {
                                 return err
                             }
@@ -95,11 +97,11 @@ func (x *{{.Name}}) Encode(field *protolizer.Type, buffer *bytes.Buffer) error {
                         bytes.WriteTo(buffer)
                         protolizer.Dealloc(bytes)
                         return nil
-                    {{- else if or eq $field.Kind 7 $field.Kind 9 $field.Kind 10 $field.Kind 11}}
+                    {{- else if or eq ($field.Kind 7) (eq $field.Kind 9) (eq $field.Kind 10) (eq $field.Kind 11) }}
                         innerBuffer := protolizer.Alloc(0)
                         defer protolizer.Dealloc(innerBuffer)
-                        for _, value := range c.{{$field.Name}} {
-                            data, err := protolizer.UnsignedNumberEncoder(uint64(value), field, protolizer.WireTypeVarint)
+                        for _, value := range x.{{$field.Name}} {
+                            data, err := protolizer.UnsignedNumberEncoder(uint64(value), field)
                             if err != nil {
                                 return err
                             }
@@ -110,11 +112,11 @@ func (x *{{.Name}}) Encode(field *protolizer.Type, buffer *bytes.Buffer) error {
                         bytes.WriteTo(buffer)
                         protolizer.Dealloc(bytes)
                         return nil
-                    {{- else if eq $field.Kind 13}
+                    {{- else if eq $field.Kind 13 }}
                         innerBuffer := protolizer.Alloc(0)
                         defer protolizer.Dealloc(innerBuffer)
-                        for _, value := range c.{{$field.Name}} {
-                            data, err := protolizer.FloatEncoder(value, field, protolizer.WireTypeVarint)
+                        for _, value := range x.{{$field.Name}} {
+                            data, err := protolizer.FloatEncoder(value, field)
                             if err != nil {
                                 return err
                             }
@@ -125,11 +127,11 @@ func (x *{{.Name}}) Encode(field *protolizer.Type, buffer *bytes.Buffer) error {
                         bytes.WriteTo(buffer)
                         protolizer.Dealloc(bytes)
                         return nil
-                    {{- else if eq $field.Kind 14}
+                    {{- else if eq $field.Kind 14 }}
                         innerBuffer := protolizer.Alloc(0)
                         defer protolizer.Dealloc(innerBuffer)
-                        for _, value := range c.{{$field.Name}} {
-                            data, err := protolizer.DoubleEncoder(value, field, protolizer.WireTypeVarint)
+                        for _, value := range x.{{$field.Name}} {
+                            data, err := protolizer.DoubleEncoder(value, field)
                             if err != nil {
                                 return err
                             }
@@ -140,17 +142,17 @@ func (x *{{.Name}}) Encode(field *protolizer.Type, buffer *bytes.Buffer) error {
                         bytes.WriteTo(buffer)
                         protolizer.Dealloc(bytes)
                         return nil
-                    {{- else if eq $field.Kind 24}
+                    {{- else if eq $field.Kind 24 }}
                         tag, err := protolizer.TagEncode(int32fieldfield.Tags.Protobuf.FieldNum), protolizer.WireTypeLen)
                         defer protolizer.Dealloc(tag)
                         if err != nil {
                             return err
                         }
-                        for i, x := range c.{{$field.Name}} {
+                        for i, x := range x.{{$field.Name}} {
                             if i != 0 {
                                 buffer.Write(tag.Bytes())
                             }
-                            data, err := protolizer.StringEncoder(x, field, field.Tags.Protobuf.WireType)
+                            data, err := protolizer.StringEncoder(x, field)
                             if err != nil {
                                 return err
                             }
@@ -158,13 +160,13 @@ func (x *{{.Name}}) Encode(field *protolizer.Type, buffer *bytes.Buffer) error {
                             protolizer.Dealloc(data)
                         }
                         return nil
-                    {{- else if eq $field.Kind 25}
+                    {{- else if eq $field.Kind 25 }}
                         tag, err := protolizer.TagEncode(int32(field.Tags.Protobuf.FieldNum), protolizer.WireTypeLen)
                         defer protolizer.Dealloc(tag)
                         if err != nil {
                             return err
                         }
-                        for i, value := range c.{{$field.Name}} {
+                        for i, value := range x.{{$field.Name}} {
                             if i != 0 {
                                 buffer.Write(tag.Bytes())
                             }
@@ -176,7 +178,7 @@ func (x *{{.Name}}) Encode(field *protolizer.Type, buffer *bytes.Buffer) error {
                         }
                         return nil  
                     {{- else }}
-                        return fmt.Errorf("unsupported index type %T", c.{{$field.Name}})
+                        return fmt.Errorf("unsupported index type %T", x.{{$field.Name}})
                     {{- end }}
                 {{- else if eq $field.Kind 21}}
                     tag, err := protolizer.TagEncode(int32(field.Tags.Protobuf.FieldNum), protolizer.WireTypeLen)
@@ -185,7 +187,7 @@ func (x *{{.Name}}) Encode(field *protolizer.Type, buffer *bytes.Buffer) error {
                         return err
                     }
                     i := 0
-                    for key, value := range c.{{$field.Name}} {
+                    for key, value := range x.{{$field.Name}} {
                         if i != 0 {
                             buffer.Write(tag.Bytes())
                         }
@@ -193,32 +195,32 @@ func (x *{{.Name}}) Encode(field *protolizer.Type, buffer *bytes.Buffer) error {
                         innerBuffer := protolizer.Alloc(0)
                         innerBuffer.Write(f.KeyTag)
                         {{- if or eq $field.Key eq 1}}
-                            k, err := protolizer.BooleanEncoder(key, field, protolizer.WireTypeLen)
+                            k, err := protolizer.BooleanEncoder(key, field)
                             if err != nil {
                                 return err
                             }
-                        {{- else if or eq $field.Key eq 2 $field.Key eq 3 $field.Key eq 4 $field.Key eq 5 $field.Key eq 6}}
-                            k, err := protolizer.SignedNumberEncoder(int64(key), field, protolizer.WireTypeLen)
+                        {{- else if or (eq $field.Key 2) (eq $field.Key 3) (eq $field.Key 4) (eq $field.Key 5) (eq $field.Key 6) }}
+                            k, err := protolizer.SignedNumberEncoder(int64(key), field)
                             if err != nil {
                                 return err
                             }
-                        {{- else if or eq $field.Key eq 7 $field.Key eq 8 $field.Key eq 9 $field.Key eq 10 $field.Key eq 11}}
-                            k, err := protolizer.UnsignedNumberEncoder(int64(key), field, protolizer.WireTypeLen)
+                        {{- else if or (eq $field.Key 7) (eq $field.Key 8) (eq $field.Key 9) (eq $field.Key 10) (eq $field.Key 11) }}
+                            k, err := protolizer.UnsignedNumberEncoder(int64(key), field)
                             if err != nil {
                                 return err
                             }
                         {{- else if or eq $field.Key eq 13}}
-                            k, err := protolizer.FloatEncoder(float32(key), field, protolizer.WireTypeLen)
+                            k, err := protolizer.FloatEncoder(float32(key), field)
                             if err != nil {
                                 return err
                             }    
                         {{- else if or eq $field.Key eq 14}}
-                            k, err := protolizer.DoubleEncoder(float64(key), field, protolizer.WireTypeLen)
+                            k, err := protolizer.DoubleEncoder(float64(key), field)
                             if err != nil {
                                 return err
                             }     
                         {{- else if or eq $field.Key eq 24}}
-                            k, err := protolizer.StringEncoder(key, field, protolizer.WireTypeLen)
+                            k, err := protolizer.StringEncoder(key, field)
                             if err != nil {
                                 return err
                             }            
@@ -229,32 +231,32 @@ func (x *{{.Name}}) Encode(field *protolizer.Type, buffer *bytes.Buffer) error {
                         protolizer.Dealloc(k)
                         innerBuffer.Write(f.ValueTag)
                         {{- if or eq $field.ValueTag eq 1}}
-                            v, err := protolizer.BooleanEncoder(value, field, protolizer.WireTypeLen)
+                            v, err := protolizer.BooleanEncoder(value, field)
                             if err != nil {
                                 return err
                             }
-                        {{- else if or eq $field.Value eq 2 $field.Value eq 3 $field.Value eq 4 $field.Value eq 5 $field.Value eq 6}}
-                            v, err := protolizer.SignedNumberEncoder(int64(value), field, protolizer.WireTypeLen)
+                        {{- else if or (eq $field.Key 2) (eq $field.Key 3) (eq $field.Key 4) (eq $field.Key 5) (eq $field.Key 6) }}
+                            v, err := protolizer.SignedNumberEncoder(int64(value), field)
                             if err != nil {
                                 return err
                             }
-                        {{- else if or eq $field.Value eq 7 $field.Value eq 8 $field.Value eq 9 $field.Value eq 10 $field.Value eq 11}}
-                            v, err := protolizer.UnsignedNumberEncoder(int64(value), field, protolizer.WireTypeLen)
+                        {{- else if or (eq $field.Key 7) (eq $field.Key 8) (eq $field.Key 9) (eq $field.Key 10) (eq $field.Key 11) }}
+                            v, err := protolizer.UnsignedNumberEncoder(int64(value), field)
                             if err != nil {
                                 return err
                             }
                         {{- else if or eq $field.Value eq 13}}
-                            v, err := protolizer.FloatEncoder(float32(value), field, protolizer.WireTypeLen)
+                            v, err := protolizer.FloatEncoder(float32(value), field)
                             if err != nil {
                                 return err
                             }    
                         {{- else if or eq $field.Value eq 14}}
-                            v, err := protolizer.DoubleEncoder(float64(value), field, protolizer.WireTypeLen)
+                            v, err := protolizer.DoubleEncoder(float64(value), field)
                             if err != nil {
                                 return err
                             }     
                         {{- else if or eq $field.Value eq 24}}
-                            v, err := protolizer.StringEncoder(value, field, protolizer.WireTypeLen)
+                            v, err := protolizer.StringEncoder(value, field)
                             if err != nil {
                                 return err
                             }  
@@ -278,7 +280,7 @@ func (x *{{.Name}}) Encode(field *protolizer.Type, buffer *bytes.Buffer) error {
                     }
                     return nil 
                 {{- else if eq $field.Kind 24}}
-                    data, err := protolizer.StringEncoder(c.{{$field.Name}}, field, field.Tags.Protobuf.WireType)
+                    data, err := protolizer.StringEncoder({{if eq $field.Optional true}}*{{end}}x.{{$field.Name}}, field)
                     defer protolizer.Dealloc(data)
                     if err != nil {
                         return err

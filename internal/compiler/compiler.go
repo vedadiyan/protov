@@ -9,8 +9,10 @@ import (
 	"math"
 	"os"
 	"path"
+	"reflect"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/bufbuild/protocompile"
 	"github.com/bufbuild/protocompile/linker"
@@ -42,10 +44,15 @@ type (
 		Dir string
 	}
 	Field struct {
-		Field         string
+		Name          string
 		Type          string
 		Tags          []string
+		Optional      bool
 		MarshalledTag string
+		Kind          reflect.Kind
+		Index         reflect.Kind
+		Key           reflect.Kind
+		FieldNum      int
 	}
 	EnumValue struct {
 		Name   string
@@ -60,6 +67,7 @@ type (
 		Fields     []*Field
 		Ignorables Ignorables
 		Descriptor string
+		TypeName   string
 	}
 	File struct {
 		Messages []*Message
@@ -148,7 +156,7 @@ func GetMessages(md protoreflect.MessageDescriptors, ignoreList Ignorables) ([]*
 		if ignoreList.Contains(string(name)) {
 			continue
 		}
-		message, err := GetMessage(name, messageDescriptor.Fields())
+		message, err := GetMessage(name, messageDescriptor.FullName(), messageDescriptor.Fields())
 		if err != nil {
 			return nil, err
 		}
@@ -172,7 +180,7 @@ func GetMessages(md protoreflect.MessageDescriptors, ignoreList Ignorables) ([]*
 	return out, nil
 }
 
-func GetMessage(name protoreflect.Name, fd protoreflect.FieldDescriptors) (*Message, error) {
+func GetMessage(name protoreflect.Name, fullName protoreflect.FullName, fd protoreflect.FieldDescriptors) (*Message, error) {
 	out := new(Message)
 	l := fd.Len()
 	if l == 0 {
@@ -191,15 +199,28 @@ func GetMessage(name protoreflect.Name, fd protoreflect.FieldDescriptors) (*Mess
 		if ok, value := CanBeIgnored(fieldDescriptor); ok {
 			out.Ignorables = append(out.Ignorables, value)
 		}
+		out.TypeName = string(fullName)
 	}
 	return out, nil
 }
 
 func GetField(fieldDescriptor protoreflect.FieldDescriptor) (*Field, error) {
 	out := new(Field)
-	out.Field = string(fieldDescriptor.FullName().Name())
+	out.Name = GetName(string(fieldDescriptor.Name()))
 	out.Type = GetKind(fieldDescriptor)
 	out.Tags = GetTags(fieldDescriptor)
+	out.FieldNum = int(fieldDescriptor.Number())
+	out.Optional = fieldDescriptor.HasOptionalKeyword()
+	if fieldDescriptor.IsMap() {
+		out.Index = GetReflectedKind(fieldDescriptor.MapKey().Kind())
+		out.Key = GetReflectedKind(fieldDescriptor.MapValue().Kind())
+	} else if fieldDescriptor.IsList() {
+		out.Kind = reflect.Array
+		out.Index = GetReflectedKind(fieldDescriptor.Kind())
+	} else {
+		out.Kind = GetReflectedKind(fieldDescriptor.Kind())
+	}
+
 	out.MarshalledTag = MarshallTags(fieldDescriptor)
 	return out, nil
 }
@@ -532,4 +553,91 @@ func marshalBytes(b []byte) (string, bool) {
 		}
 	}
 	return string(s), true
+}
+
+func GetReflectedKind(k protoreflect.Kind) reflect.Kind {
+	switch k {
+	case protoreflect.BoolKind:
+		{
+			return reflect.Bool
+		}
+	case protoreflect.EnumKind:
+		{
+			return reflect.Int
+		}
+	case protoreflect.Int32Kind:
+		{
+			return reflect.Int
+		}
+	case protoreflect.Sint32Kind:
+		{
+			return reflect.Int
+		}
+	case protoreflect.Uint32Kind:
+		{
+			return reflect.Uint
+		}
+	case protoreflect.Int64Kind:
+		{
+			return reflect.Uint64
+		}
+	case protoreflect.Sint64Kind:
+		{
+			return reflect.Int64
+		}
+	case protoreflect.Uint64Kind:
+		{
+			return reflect.Uint64
+		}
+	case protoreflect.Sfixed32Kind:
+		{
+			return reflect.Int
+		}
+	case protoreflect.Fixed32Kind:
+		{
+			return reflect.Int
+		}
+	case protoreflect.FloatKind:
+		{
+			return reflect.Float32
+		}
+	case protoreflect.Sfixed64Kind:
+		{
+			return reflect.Int64
+		}
+	case protoreflect.Fixed64Kind:
+		{
+			return reflect.Int64
+		}
+	case protoreflect.DoubleKind:
+		{
+			return reflect.Float64
+		}
+	case protoreflect.StringKind:
+		{
+			return reflect.String
+		}
+	case protoreflect.BytesKind:
+		{
+			return reflect.Array
+		}
+	case protoreflect.MessageKind:
+		{
+			return reflect.Struct
+		}
+	default:
+		{
+			return reflect.Invalid
+		}
+	}
+}
+
+func GetName(str string) string {
+	segments := strings.Split(str, "_")
+	for i, value := range segments {
+		x := []byte(value)
+		x[0] = byte(unicode.ToUpper(rune(x[0])))
+		segments[i] = string(x)
+	}
+	return strings.Join(segments, "")
 }

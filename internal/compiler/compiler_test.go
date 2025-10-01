@@ -5,8 +5,6 @@ import (
 	"os"
 	"testing"
 	"text/template"
-
-	"google.golang.org/protobuf/proto"
 )
 
 func TestCompile(t *testing.T) {
@@ -27,22 +25,22 @@ func TestCompile(t *testing.T) {
 	os.WriteFile("test.go", []byte(_r), os.ModePerm)
 }
 
-func TestT(t *testing.T) {
-	id := int64(1)
-	x := User{
-		id:         &id,
-		first_name: "test",
-	}
+// func TestT(t *testing.T) {
+// 	id := int64(1)
+// 	x := User{
+// 		id:         &id,
+// 		first_name: "test",
+// 	}
 
-	z, err := proto.Marshal(&x)
-	if err != nil {
-		t.FailNow()
-	}
+// 	z, err := proto.Marshal(&x)
+// 	if err != nil {
+// 		t.FailNow()
+// 	}
 
-	zz := User{}
-	err = proto.Unmarshal(z, &zz)
-	if err != nil {
-		t.FailNow()
-	}
+// 	zz := User{}
+// 	err = proto.Unmarshal(z, &zz)
+// 	if err != nil {
+// 		t.FailNow()
+// 	}
 
-}
+// }
