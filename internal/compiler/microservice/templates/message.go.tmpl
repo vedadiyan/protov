@@ -319,29 +319,35 @@ func (x *{{.Name}}) Decode(field *protolizer.Field, buffer *bytes.Buffer) error 
                         return err
                     } 
                     x.{{$field.Name}} = {{- if eq $field.Optional true}}&{{end}}value
+                    return nil
                 {{- else if or (eq $field.Kind 2) (eq $field.Kind 3) (eq $field.Kind 4) (eq $field.Kind 5) (eq $field.Kind 6) }} 
                     value, err := protolizer.SignedNumberDecoder(field, buffer)
                      if err != nil {
                         return err
                     } 
                     x.{{$field.Name}} = {{- if eq $field.Optional true}}&{{end}}value
+                     return nil
                 {{- else if or (eq $field.Kind 7) (eq $field.Kind 8) (eq $field.Kind 9) (eq $field.Kind 10) (eq $field.Kind 11) }} 
                     value, err := protolizer.UnsignedNumberDecoder(field, buffer)
                      if err != nil {
                         return err
                     } 
                     x.{{$field.Name}} = {{- if eq $field.Optional true}}&{{end}}value
+                     return nil
                 {{- else if eq $field.Kind 13}} 
                     value, err := protolizer.FloatDecoder(field, buffer)
                      if err != nil {
                         return err
                     } 
                     x.{{$field.Name}} = {{- if eq $field.Optional true}}&{{end}}value
+                    return nil
                 {{- else if eq $field.Kind 14}} 
                     value, err := protolizer.DoubleDecoder(field, buffer)
                      if err != nil {
                         return err
                     } 
+                    x.{{$field.Name}} = {{- if eq $field.Optional true}}&{{end}}value
+                    return nil
                 {{- else if eq $field.Kind 17}} 
                     {{- if eq $field.Index 8}}
                         bytes, err := protolizer.BytesDecode(buffer)
@@ -349,6 +355,7 @@ func (x *{{.Name}}) Decode(field *protolizer.Field, buffer *bytes.Buffer) error 
                             return err
                         }
                         x.{{$field.Name}} = bytes
+                        return nil
                     {{- else if or eq $field.kind 1}}
                         bytes, err := protolizer.BytesDecode(buffer)
                         if err != nil {
@@ -604,13 +611,14 @@ func (x *{{.Name}}) Decode(field *protolizer.Field, buffer *bytes.Buffer) error 
                         {{- end }}
                         c.Metadata[{{$field.Type}}(key)] = {{$field.Type}}(value)
                         protolizer.Dealloc(innerBuffer)
-
+                        return nil
                 {{- else if eq $field.Kind 24}}
                     value, err := protolizer.StringDecoder(field, buffer)
                      if err != nil {
                         return err
                     } 
                     x.{{$field.Name}} = {{- if eq $field.Optional true}}&{{end}}value
+                    return nil
                 {{- else if eq $field.Kind 25}}
                     var value {{$field.Type}}
                     bytes, err := protolizer.DecodeBytes(field, buffer)
@@ -622,6 +630,7 @@ func (x *{{.Name}}) Decode(field *protolizer.Field, buffer *bytes.Buffer) error 
                         return err
                     }     
                     x.{{$field.Name}} = {{- if eq $field.Optional true}}&{{end}}value    
+                    return nil
                 {{- else }}
                     return fmt.Errorf("unsupported field type %T", key})
                 {{- end }}
