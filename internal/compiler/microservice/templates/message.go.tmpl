@@ -664,7 +664,7 @@ func (x *{{.Name}}) IsZero(field *protolizer.Field) bool {
                 {{- else if eq $field.Kind 24}}
                     return {{if eq $field.Optional true}}x.{{$field.Name}} == nil {{else}} len(x.{{$field.Name}}) == 0{{end}}
                 {{- else if eq $field.Kind 25}}
-                    {{if eq $field.Optional true}}return x.{{$field.Name}} == nil {{else}}return false {{end}}
+                    return x.{{$field.Name}} == nil
                 {{- else }}
                     return true
                 {{- end }}
