@@ -197,8 +197,8 @@ func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error 
                         }
                         i++
                         innerBuffer := protolizer.Alloc(0)
-                        innerBuffer.Write(f.KeyTag)
-                        {{- if or eq $field.Key eq 1}}
+                        innerBuffer.Write(field.KeyTag)
+                        {{- if eq $field.Key 1}}
                             k, err := protolizer.BooleanEncoder(key, field)
                             if err != nil {
                                 return err
@@ -213,17 +213,17 @@ func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error 
                             if err != nil {
                                 return err
                             }
-                        {{- else if or eq $field.Key eq 13}}
+                        {{- else if eq $field.Key 13}}
                             k, err := protolizer.FloatEncoder(float32(key), field)
                             if err != nil {
                                 return err
                             }    
-                        {{- else if or eq $field.Key eq 14}}
+                        {{- else if eq $field.Key 14}}
                             k, err := protolizer.DoubleEncoder(float64(key), field)
                             if err != nil {
                                 return err
                             }     
-                        {{- else if or eq $field.Key eq 24}}
+                        {{- else if eq $field.Key 24}}
                             k, err := protolizer.StringEncoder(key, field)
                             if err != nil {
                                 return err
@@ -233,8 +233,8 @@ func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error 
                         {{- end }}
                         k.WriteTo(innerBuffer)
                         protolizer.Dealloc(k)
-                        innerBuffer.Write(f.ValueTag)
-                        {{- if or eq $field.ValueTag eq 1}}
+                        innerBuffer.Write(field.ValueTag)
+                        {{- if eq $field.Index 1}}
                             v, err := protolizer.BooleanEncoder(value, field)
                             if err != nil {
                                 return err
@@ -249,22 +249,22 @@ func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error 
                             if err != nil {
                                 return err
                             }
-                        {{- else if or eq $field.Index eq 13}}
+                        {{- else if eq $field.Index 13}}
                             v, err := protolizer.FloatEncoder(float32(value), field)
                             if err != nil {
                                 return err
                             }    
-                        {{- else if or eq $field.Index eq 14}}
+                        {{- else if eq $field.Index 14}}
                             v, err := protolizer.DoubleEncoder(float64(value), field)
                             if err != nil {
                                 return err
                             }     
-                        {{- else if or eq $field.Index eq 24}}
+                        {{- else if eq $field.Index 24}}
                             v, err := protolizer.StringEncoder(value, field)
                             if err != nil {
                                 return err
                             }  
-                        {{- else if or eq $field.Index eq 25}}
+                        {{- else if eq $field.Index 25}}
                             _v, err := protolizer.FastMarshal(value)
                             if err != nil {
                                 return err
@@ -501,7 +501,7 @@ func (x *{{.Name}}) Decode(field *protolizer.Field, buffer *bytes.Buffer) error 
                         return fmt.Errorf("unsupported index type %T", x.{{$field.Name}})
                     {{- end }}
                 {{- else if eq $field.Kind 21}}
-                   c.Metadata = make(map[string]string)
+                   x.Metadata = make(map[string]string)
                     i := 0
                     for {
                         if i != 0 {
@@ -524,39 +524,39 @@ func (x *{{.Name}}) Decode(field *protolizer.Field, buffer *bytes.Buffer) error 
                         }
                         innerBuffer := protolizer.Alloc(0)
                         innerBuffer.Write(bytes)
-                        _, _, err := protolizer.TagDecode(innerBuffer)
+                        _, _, err = protolizer.TagDecode(innerBuffer)
                         if err != nil {
                             protolizer.Dealloc(innerBuffer)
                             return err
                         }
      
-                       {{- if or eq $field.Key eq 1}}
-                            key, err := protolizer.BooleanDecoder(field, buffer)
+                       {{- if eq $field.Key 1}}
+                            key, err := protolizer.BooleanDecoder(field, innerBuffer)
                             if err != nil {
                                 return err
                             }
                         {{- else if or (eq $field.Key 2) (eq $field.Key 3) (eq $field.Key 4) (eq $field.Key 5) (eq $field.Key 6) }}
-                            key, err := protolizer.SignedNumberDecoder(field, buffer)
+                            key, err := protolizer.SignedNumberDecoder(field, innerBuffer)
                             if err != nil {
                                 return err
                             }
                         {{- else if or (eq $field.Key 7) (eq $field.Key 8) (eq $field.Key 9) (eq $field.Key 10) (eq $field.Key 11) }}
-                            key, err := protolizer.UnsignedNumberDecoder(field, buffer)
+                            key, err := protolizer.UnsignedNumberDecoder(field, innerBuffer)
                             if err != nil {
                                 return err
                             }
-                        {{- else if or eq $field.Key eq 13}}
-                            key, err := protolizer.FloatDecoder(field, buffer)
+                        {{- else if eq $field.Key 13}}
+                            key, err := protolizer.FloatDecoder(field, innerBuffer)
                             if err != nil {
                                 return err
                             }    
-                        {{- else if or eq $field.Key eq 14}}
-                            key, err := protolizer.DoubleDecoder(field, buffer)
+                        {{- else if eq $field.Key 14}}
+                            key, err := protolizer.DoubleDecoder(field, innerBuffer)
                             if err != nil {
                                 return err
                             }     
-                        {{- else if or eq $field.Key eq 24}}
-                            key, err := protolizer.StringDecoder(field, buffer)
+                        {{- else if eq $field.Key 24}}
+                            key, err := protolizer.StringDecoder(field, innerBuffer)
                             if err != nil {
                                 return err
                             }            
@@ -565,44 +565,44 @@ func (x *{{.Name}}) Decode(field *protolizer.Field, buffer *bytes.Buffer) error 
                         {{- end }}
 
                         
-                        _, _, err := protolizer.TagDecode(innerBuffer)
+                        _, _, err = protolizer.TagDecode(innerBuffer)
                         if err != nil {
                             protolizer.Dealloc(innerBuffer)
                             return err
                         }
 
-                        {{- if or eq $field.Index eq 1}}
-                            value, err := protolizer.BooleanDecoder(field, buffer)
+                        {{- if eq $field.Index 1}}
+                            value, err := protolizer.BooleanDecoder(field, innerBuffer)
                             if err != nil {
                                 return err
                             }
                         {{- else if or (eq $field.Index 2) (eq $field.Index 3) (eq $field.Index 4) (eq $field.Index 5) (eq $field.Index 6) }}
-                            value, err := protolizer.SignedNumberDecoder(field, buffer)
+                            value, err := protolizer.SignedNumberDecoder(field, innerBuffer)
                             if err != nil {
                                 return err
                             }
                         {{- else if or (eq $field.Index 7) (eq $field.Index 8) (eq $field.Index 9) (eq $field.Index 10) (eq $field.Index 11) }}
-                            value, err := protolizer.UnsignedNumberDecoder(field, buffer)
+                            value, err := protolizer.UnsignedNumberDecoder(field, innerBuffer)
                             if err != nil {
                                 return err
                             }
-                        {{- else if or eq $field.Index eq 13}}
-                            value, err := protolizer.FloatDecoder(field, buffer)
+                        {{- else if eq $field.Index 13}}
+                            value, err := protolizer.FloatDecoder(field, innerBuffer)
                             if err != nil {
                                 return err
                             }    
-                        {{- else if or eq $field.Index eq 14}}
-                            value, err := protolizer.DoubleDecoder(field, buffer)
+                        {{- else if eq $field.Index 14}}
+                            value, err := protolizer.DoubleDecoder(field, innerBuffer)
                             if err != nil {
                                 return err
                             }     
-                        {{- else if or eq $field.Index eq 24}}
-                            value, err := protolizer.StringDecoder(field, buffer)
+                        {{- else if eq $field.Index 24}}
+                            value, err := protolizer.StringDecoder(field, innerBuffer)
                             if err != nil {
                                 return err
                             }  
-                        {{- else if or eq $field.Index eq 25}}
-                            data, err := protolizer.BytesDecode(buffer)
+                        {{- else if eq $field.Index 25}}
+                            data, err := protolizer.BytesDecode(innerBuffer)
                             if err != nil {
                                 return err
                             }
@@ -614,9 +614,10 @@ func (x *{{.Name}}) Decode(field *protolizer.Field, buffer *bytes.Buffer) error 
                         {{- else }}
                             return fmt.Errorf("unsupported value type %T", value})
                         {{- end }}
-                        c.Metadata[{{$field.Type}}(key)] = {{$field.Type}}(value)
+                        x.{{$field.Name}}[{{$field.KeyBaseType}}(key)] = {{$field.IndexBaseType}}(value)
                         protolizer.Dealloc(innerBuffer)
-                        return nil
+                    }
+                    return nil
                 {{- else if eq $field.Kind 24}}
                     value, err := protolizer.StringDecoder(field, buffer)
                      if err != nil {

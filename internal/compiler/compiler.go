@@ -47,6 +47,8 @@ type (
 		Name          string
 		Type          string
 		BaseType      string
+		KeyBaseType   string
+		IndexBaseType string
 		Tags          []string
 		Optional      bool
 		MarshalledTag string
@@ -211,19 +213,29 @@ func GetField(fieldDescriptor protoreflect.FieldDescriptor) (*Field, error) {
 	out.Type = GetKind(fieldDescriptor)
 	out.BaseType = strings.ReplaceAll(out.Type, "*", "")
 	out.BaseType = strings.ReplaceAll(out.BaseType, "[]", "")
+
 	out.Tags = GetTags(fieldDescriptor)
 	out.FieldNum = int(fieldDescriptor.Number())
 	out.Optional = fieldDescriptor.HasOptionalKeyword()
 	if fieldDescriptor.IsMap() {
+		out.Kind = reflect.Map
 		out.Index = GetReflectedKind(fieldDescriptor.MapKey().Kind())
 		out.Key = GetReflectedKind(fieldDescriptor.MapValue().Kind())
+		out.KeyBaseType = GetKind(fieldDescriptor.MapKey())
+		out.KeyBaseType = strings.ReplaceAll(out.KeyBaseType, "*", "")
+		out.KeyBaseType = strings.ReplaceAll(out.KeyBaseType, "[]", "")
+		out.IndexBaseType = GetKind(fieldDescriptor.MapValue())
+		out.IndexBaseType = strings.ReplaceAll(out.IndexBaseType, "*", "")
+		out.IndexBaseType = strings.ReplaceAll(out.IndexBaseType, "[]", "")
 	} else if fieldDescriptor.IsList() {
 		out.Kind = reflect.Array
 		out.Index = GetReflectedKind(fieldDescriptor.Kind())
+		out.IndexBaseType = GetKind(fieldDescriptor)
+		out.IndexBaseType = strings.ReplaceAll(out.IndexBaseType, "*", "")
+		out.IndexBaseType = strings.ReplaceAll(out.IndexBaseType, "[]", "")
 	} else {
 		out.Kind = GetReflectedKind(fieldDescriptor.Kind())
 	}
-
 	out.MarshalledTag = MarshallTags(fieldDescriptor)
 	return out, nil
 }
