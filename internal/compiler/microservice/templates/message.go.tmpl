@@ -178,7 +178,9 @@ func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error 
                             if err != nil {
                                 return err
                             }
-                            buffer.Write(data)
+                            bytes := protolizer.BytesEncode(data)
+                            defer protolizer.Dealloc(bytes)
+                            bytes.WriteTo(buffer)
                         }
                         return nil  
                     {{- else }}
@@ -270,7 +272,9 @@ func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error 
                                 return err
                             }  
                             v := protolizer.Alloc(0)
-                            v.Write(_v)
+                            bytes := protolizer.BytesEncode(_v)
+                            bytes.WriteTo(v)
+                            protolizer.Dealloc(bytes)
                         {{- else }}
                             return fmt.Errorf("unsupported value type %T", value)
                         {{- end }}
@@ -296,7 +300,9 @@ func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error 
                     if err != nil {
                         return err
                     }  
-                    buffer.Write(data)
+                    bytes := protolizer.BytesEncode(data)
+                    defer protolizer.Dealloc(bytes)
+                    bytes.WriteTo(buffer)
                     return nil
                 {{- else }}
                     return fmt.Errorf("unsupported field type {{$field.Kind}}")
@@ -487,7 +493,7 @@ func (x *{{.Name}}) Decode(field *protolizer.Field, buffer *bytes.Buffer) error 
                                 return err
                             }
                             bytes := protolizer.Alloc(0)
-                            var value {{$field.Type}}
+                            value := new({{$field.BaseType}})
                             bytes.Write(data)
                             err = protolizer.FastUnmarshal(value, data)
                             protolizer.Dealloc(bytes)
@@ -606,7 +612,7 @@ func (x *{{.Name}}) Decode(field *protolizer.Field, buffer *bytes.Buffer) error 
                             if err != nil {
                                 return err
                             }
-                            var value {{$field.Type}}
+                            value := new({{$field.BaseType}})
                             err = protolizer.FastUnmarshal(value, data)
                             if err != nil {
                                 return err
@@ -626,7 +632,7 @@ func (x *{{.Name}}) Decode(field *protolizer.Field, buffer *bytes.Buffer) error 
                     x.{{$field.Name}} = {{- if eq $field.Optional true}}&{{end}}value
                     return nil
                 {{- else if eq $field.Kind 25}}
-                    var value {{$field.Type}}
+                    value := new({{$field.BaseType}})
                     bytes, err := protolizer.BytesDecode(buffer)
                     if err != nil {
                         return err
