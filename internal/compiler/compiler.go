@@ -46,6 +46,7 @@ type (
 	Field struct {
 		Name          string
 		Type          string
+		BaseType      string
 		Tags          []string
 		Optional      bool
 		MarshalledTag string
@@ -208,6 +209,8 @@ func GetField(fieldDescriptor protoreflect.FieldDescriptor) (*Field, error) {
 	out := new(Field)
 	out.Name = GetName(string(fieldDescriptor.Name()))
 	out.Type = GetKind(fieldDescriptor)
+	out.BaseType = strings.ReplaceAll(out.Type, "*", "")
+	out.BaseType = strings.ReplaceAll(out.BaseType, "[]", "")
 	out.Tags = GetTags(fieldDescriptor)
 	out.FieldNum = int(fieldDescriptor.Number())
 	out.Optional = fieldDescriptor.HasOptionalKeyword()

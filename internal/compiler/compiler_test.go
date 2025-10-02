@@ -8,7 +8,7 @@ import (
 )
 
 func TestCompile(t *testing.T) {
-	res, err := Compile("C:\\Users\\Pouya\\Desktop\\lab\\users\\model.proto")
+	res, err := Compile("C:\\Users\\Pouya\\Desktop\\lab\\protolizer\\proto2\\test.proto")
 	if err != nil {
 		t.FailNow()
 	}
