@@ -82,7 +82,8 @@ func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error 
                             data.WriteTo(innerBuffer)
                             protolizer.Dealloc(data)
                         }
-                        bytes := protolizer.BytesEncode(innerBuffer.Bytes())
+
+                        bytes := protolizer.BufferEncode(innerBuffer)
                         bytes.WriteTo(buffer)
                         protolizer.Dealloc(bytes)
                         return nil
@@ -97,7 +98,7 @@ func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error 
                             data.WriteTo(innerBuffer)
                             protolizer.Dealloc(data)
                         }
-                        bytes := protolizer.BytesEncode(innerBuffer.Bytes())
+                        bytes := protolizer.BufferEncode(innerBuffer)
                         bytes.WriteTo(buffer)
                         protolizer.Dealloc(bytes)
                         return nil
@@ -112,7 +113,7 @@ func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error 
                             data.WriteTo(innerBuffer)
                             protolizer.Dealloc(data)
                         }
-                        bytes := protolizer.BytesEncode(innerBuffer.Bytes())
+                        bytes := protolizer.BufferEncode(innerBuffer)
                         bytes.WriteTo(buffer)
                         protolizer.Dealloc(bytes)
                         return nil
@@ -127,7 +128,7 @@ func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error 
                             data.WriteTo(innerBuffer)
                             protolizer.Dealloc(data)
                         }
-                        bytes := protolizer.BytesEncode(innerBuffer.Bytes())
+                        bytes := protolizer.BufferEncode(innerBuffer)
                         bytes.WriteTo(buffer)
                         protolizer.Dealloc(bytes)
                         return nil
@@ -142,7 +143,7 @@ func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error 
                             data.WriteTo(innerBuffer)
                             protolizer.Dealloc(data)
                         }
-                        bytes := protolizer.BytesEncode(innerBuffer.Bytes())
+                        bytes := protolizer.BufferEncode(innerBuffer)
                         bytes.WriteTo(buffer)
                         protolizer.Dealloc(bytes)
                         return nil
@@ -174,13 +175,14 @@ func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error 
                             if i != 0 {
                                 buffer.Write(tag.Bytes())
                             }
-                            data, err := protolizer.FastMarshal(x.{{$field.Name}})
+                            data, err := protolizer.FastMarshalToBuffer(x.{{$field.Name}})
                             if err != nil {
                                 return err
                             }
-                            bytes := protolizer.BytesEncode(data)
-                            defer protolizer.Dealloc(bytes)
+                            bytes := protolizer.BufferEncode(data)
                             bytes.WriteTo(buffer)
+                            protolizer.Dealloc(data)
+                            protolizer.Dealloc(bytes)
                         }
                         return nil  
                     {{- else }}
@@ -267,21 +269,18 @@ func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error 
                                 return err
                             }  
                         {{- else if eq $field.Index 25}}
-                            _v, err := protolizer.FastMarshal(value)
+                            v, err := protolizer.FastMarshalToBuffer(value)
                             if err != nil {
                                 return err
                             }  
-                            v := protolizer.Alloc(0)
-                            bytes := protolizer.BytesEncode(_v)
-                            bytes.WriteTo(v)
-                            protolizer.Dealloc(bytes)
                         {{- else }}
                             return fmt.Errorf("unsupported value type %T", value)
                         {{- end }}
 
+
                         v.WriteTo(innerBuffer)
                         protolizer.Dealloc(v)
-                        bytes := protolizer.BytesEncode(innerBuffer.Bytes())
+                        bytes := protolizer.BufferEncode(innerBuffer)
                         bytes.WriteTo(buffer)
                         protolizer.Dealloc(innerBuffer)
                         protolizer.Dealloc(bytes)
@@ -296,11 +295,13 @@ func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error 
                     data.WriteTo(buffer)
                     return nil
                 {{- else if eq $field.Kind 25}}
-                    data, err := protolizer.FastMarshal(x.{{$field.Name}})
+                    data, err := protolizer.FastMarshalToBuffer(x.{{$field.Name}})
+                    defer protolizer.Dealloc(data)
                     if err != nil {
                         return err
                     }  
-                    bytes := protolizer.BytesEncode(data)
+
+                    bytes := protolizer.BufferEncode(data)
                     defer protolizer.Dealloc(bytes)
                     bytes.WriteTo(buffer)
                     return nil
