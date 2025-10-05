@@ -1,0 +1,38 @@
+{{- define "IsZeroMethod"}}
+func (x *{{.Name}}) IsZero(field *protolizer.Field) bool {
+    switch field.Tags.Protobuf.FieldNum {
+        {{- range $field := .Fields}}
+            case {{ $field.FieldNum }}: {
+                {{template "IsZeroCheck" $field}}
+            }
+        {{- end }}   
+        default: {
+           return true
+        }     
+    }    
+}
+{{- end}}
+
+{{- define "IsZeroCheck"}}
+    {{- if eq .Kind 1}}
+        return {{if eq .Optional true}}*{{end}}x.{{.Name}} == false
+    {{- else if or (eq .Kind 2) (eq .Kind 3) (eq .Kind 4) (eq .Kind 5) (eq .Kind 6)}}
+        return {{if eq .Optional true}}x.{{.Name}} == nil {{else}} x.{{.Name}} == 0{{end}}
+    {{- else if or (eq .Kind 7) (eq .Kind 8) (eq .Kind 9) (eq .Kind 10) (eq .Kind 11)}}
+        return {{if eq .Optional true}}x.{{.Name}} == nil {{else}} x.{{.Name}} == 0{{end}}
+    {{- else if eq .Kind 13}}
+        return {{if eq .Optional true}}x.{{.Name}} == nil {{else}} x.{{.Name}} == 0{{end}}
+    {{- else if eq .Kind 14}}
+        return {{if eq .Optional true}}x.{{.Name}} == nil {{else}} x.{{.Name}} == 0{{end}}
+    {{- else if eq .Kind 17}}
+        return x.{{.Name}} == nil
+    {{- else if eq .Kind 21}}
+        return x.{{.Name}} == nil
+    {{- else if eq .Kind 24}}
+        return {{if eq .Optional true}}x.{{.Name}} == nil {{else}} len(x.{{.Name}}) == 0{{end}}
+    {{- else if eq .Kind 25}}
+        return x.{{.Name}} == nil
+    {{- else}}
+        return true
+    {{- end}}
+{{- end}}

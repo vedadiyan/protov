@@ -1,0 +1,128 @@
+{{- define "EncodeRepeated"}}
+    {{- if eq .Index 8}}
+        {{template "EncodeBytes" .}}
+    {{- else if eq .Index 1}}
+        {{template "EncodeRepeatedBool" .}}
+    {{- else if or (eq .Index 2) (eq .Index 3) (eq .Index 4) (eq .Index 5) (eq .Index 6)}}
+        {{template "EncodeRepeatedSigned" .}}
+    {{- else if or (eq .Index 7) (eq .Index 9) (eq .Index 10) (eq .Index 11)}}
+        {{template "EncodeRepeatedUnsigned" .}}
+    {{- else if eq .Index 13}}
+        {{template "EncodeRepeatedFloat32" .}}
+    {{- else if eq .Index 14}}
+        {{template "EncodeRepeatedFloat64" .}}
+    {{- else if eq .Index 24}}
+        {{template "EncodeRepeatedString" .}}
+    {{- else if eq .Index 25}}
+        {{template "EncodeRepeatedMessage" .}}
+    {{- else}}
+        return fmt.Errorf("unsupported index type %T", x.{{.Name}})
+    {{- end}}
+{{- end}}
+
+{{- define "EncodeBytes"}}
+data, err := protolizer.EncodeBytes(int64({{if eq .Optional true}}*{{end}}x.{{.Name}}), field)
+defer protolizer.Dealloc(data)
+if err != nil {
+    return err
+}
+data.WriteTo(buffer)
+return nil
+{{- end}}
+
+{{- define "EncodeRepeatedBool"}}
+innerBuffer := protolizer.Alloc(0)
+defer protolizer.Dealloc(innerBuffer)
+for _, value := range x.{{.Name}} {
+    protolizer.BoolInlineEncode(value, innerBuffer)
+}
+bytes := protolizer.BufferEncode(innerBuffer)
+bytes.WriteTo(buffer)
+protolizer.Dealloc(bytes)
+return nil
+{{- end}}
+
+{{- define "EncodeRepeatedSigned"}}
+innerBuffer := protolizer.Alloc(0)
+defer protolizer.Dealloc(innerBuffer)
+for _, value := range x.{{.Name}} {
+    protolizer.SignedNumberInlineEncoder(int64(value), field, innerBuffer)
+}
+bytes := protolizer.BufferEncode(innerBuffer)
+bytes.WriteTo(buffer)
+protolizer.Dealloc(bytes)
+return nil
+{{- end}}
+
+{{- define "EncodeRepeatedUnsigned"}}
+innerBuffer := protolizer.Alloc(0)
+defer protolizer.Dealloc(innerBuffer)
+for _, value := range x.{{.Name}} {
+    protolizer.UnsignedNumberInlineEncoder(uint64(value), field, innerBuffer)
+}
+bytes := protolizer.BufferEncode(innerBuffer)
+bytes.WriteTo(buffer)
+protolizer.Dealloc(bytes)
+return nil
+{{- end}}
+
+{{- define "EncodeRepeatedFloat32"}}
+innerBuffer := protolizer.Alloc(0)
+defer protolizer.Dealloc(innerBuffer)
+for _, value := range x.{{.Name}} {
+    protolizer.Float32InlineEncode(value, innerBuffer)
+}
+bytes := protolizer.BufferEncode(innerBuffer)
+bytes.WriteTo(buffer)
+protolizer.Dealloc(bytes)
+return nil
+{{- end}}
+
+{{- define "EncodeRepeatedFloat64"}}
+innerBuffer := protolizer.Alloc(0)
+defer protolizer.Dealloc(innerBuffer)
+for _, value := range x.{{.Name}} {
+    protolizer.Float64InlineEncode(value, innerBuffer)
+}
+bytes := protolizer.BufferEncode(innerBuffer)
+bytes.WriteTo(buffer)
+protolizer.Dealloc(bytes)
+return nil
+{{- end}}
+
+{{- define "EncodeRepeatedString"}}
+tag, err := protolizer.TagEncode(int32(field.Tags.Protobuf.FieldNum), protolizer.WireTypeLen)
+defer protolizer.Dealloc(tag)
+if err != nil {
+    return err
+}
+for i, x := range x.{{.Name}} {
+    if i != 0 {
+        buffer.Write(tag.Bytes())
+    }
+    protolizer.StringInlineEncode(x, buffer)
+}
+return nil
+{{- end}}
+
+{{- define "EncodeRepeatedMessage"}}
+tag, err := protolizer.TagEncode(int32(field.Tags.Protobuf.FieldNum), protolizer.WireTypeLen)
+defer protolizer.Dealloc(tag)
+if err != nil {
+    return err
+}
+for i, value := range x.{{.Name}} {
+    if i != 0 {
+        buffer.Write(tag.Bytes())
+    }
+    data, err := protolizer.FastInlineMarshal(&value)
+    if err != nil {
+        return err
+    }
+    bytes := protolizer.BufferEncode(data)
+    bytes.WriteTo(buffer)
+    protolizer.Dealloc(data)
+    protolizer.Dealloc(bytes)
+}
+return nil
+{{- end}}

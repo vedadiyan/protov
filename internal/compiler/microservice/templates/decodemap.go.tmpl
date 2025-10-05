@@ -1,0 +1,127 @@
+{{- define "DecodeMap"}}
+x.Metadata = make(map[string]string)
+i := 0
+for {
+    if i != 0 {
+        i, _, read, err := protolizer.TagPeek(buffer)
+        if err != nil {
+            if err == io.EOF {
+                return nil
+            }
+            return err
+        }
+        if i != int32(field.Tags.Protobuf.FieldNum) {
+            break
+        }
+        read()
+    }
+    i++
+    bytes, err := protolizer.BytesDecode(buffer)
+    if err != nil {
+        return nil
+    }
+    innerBuffer := protolizer.Alloc(0)
+    innerBuffer.Write(bytes)
+    _, _, err = protolizer.TagDecode(innerBuffer)
+    if err != nil {
+        protolizer.Dealloc(innerBuffer)
+        return err
+    }
+
+    {{template "DecodeMapKey" .}}
+    
+    _, _, err = protolizer.TagDecode(innerBuffer)
+    if err != nil {
+        protolizer.Dealloc(innerBuffer)
+        return err
+    }
+
+    {{template "DecodeMapValue" .}}
+    
+    x.{{.Name}}[{{.KeyBaseType}}(key)] = {{.IndexBaseType}}(value)
+    protolizer.Dealloc(innerBuffer)
+}
+return nil
+{{- end}}
+
+{{- define "DecodeMapKey"}}
+    {{- if eq .Key 1}}
+        key, err := protolizer.BooleanDecoder(field, innerBuffer)
+        if err != nil {
+            return err
+        }
+    {{- else if or (eq .Key 2) (eq .Key 3) (eq .Key 4) (eq .Key 5) (eq .Key 6)}}
+        key, err := protolizer.SignedNumberDecoder(field, innerBuffer)
+        if err != nil {
+            return err
+        }
+    {{- else if or (eq .Key 7) (eq .Key 8) (eq .Key 9) (eq .Key 10) (eq .Key 11)}}
+        key, err := protolizer.UnsignedNumberDecoder(field, innerBuffer)
+        if err != nil {
+            return err
+        }
+    {{- else if eq .Key 13}}
+        key, err := protolizer.FloatDecoder(field, innerBuffer)
+        if err != nil {
+            return err
+        }    
+    {{- else if eq .Key 14}}
+        key, err := protolizer.DoubleDecoder(field, innerBuffer)
+        if err != nil {
+            return err
+        }     
+    {{- else if eq .Key 24}}
+        key, err := protolizer.StringDecoder(field, innerBuffer)
+        if err != nil {
+            return err
+        }            
+    {{- else}}
+        return fmt.Errorf("unsupported key type %T", key})
+    {{- end}}
+{{- end}}
+
+{{- define "DecodeMapValue"}}
+    {{- if eq .Index 1}}
+        value, err := protolizer.BooleanDecoder(field, innerBuffer)
+        if err != nil {
+            return err
+        }
+    {{- else if or (eq .Index 2) (eq .Index 3) (eq .Index 4) (eq .Index 5) (eq .Index 6)}}
+        value, err := protolizer.SignedNumberDecoder(field, innerBuffer)
+        if err != nil {
+            return err
+        }
+    {{- else if or (eq .Index 7) (eq .Index 8) (eq .Index 9) (eq .Index 10) (eq .Index 11)}}
+        value, err := protolizer.UnsignedNumberDecoder(field, innerBuffer)
+        if err != nil {
+            return err
+        }
+    {{- else if eq .Index 13}}
+        value, err := protolizer.FloatDecoder(field, innerBuffer)
+        if err != nil {
+            return err
+        }    
+    {{- else if eq .Index 14}}
+        value, err := protolizer.DoubleDecoder(field, innerBuffer)
+        if err != nil {
+            return err
+        }     
+    {{- else if eq .Index 24}}
+        value, err := protolizer.StringDecoder(field, innerBuffer)
+        if err != nil {
+            return err
+        }  
+    {{- else if eq .Index 25}}
+        data, err := protolizer.BytesDecode(innerBuffer)
+        if err != nil {
+            return err
+        }
+        value := new({{.BaseType}})
+        err = protolizer.FastUnmarshal(data, value)
+        if err != nil {
+            return err
+        }  
+    {{- else}}
+        return fmt.Errorf("unsupported value type %T", value})
+    {{- end}}
+{{- end}}

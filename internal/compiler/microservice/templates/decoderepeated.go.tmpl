@@ -1,0 +1,180 @@
+{{- define "DecodeRepeated"}}
+    {{- if eq .Index 8}}
+        {{template "DecodeBytes" .}}
+    {{- else if eq .Index 1}}
+        {{template "DecodeRepeatedBool" .}}
+    {{- else if or (eq .Index 2) (eq .Index 3) (eq .Index 4) (eq .Index 5) (eq .Index 6)}}
+        {{template "DecodeRepeatedSigned" .}}
+    {{- else if or (eq .Index 7) (eq .Index 9) (eq .Index 10) (eq .Index 11)}}
+        {{template "DecodeRepeatedUnsigned" .}}
+    {{- else if eq .Index 13}}
+        {{template "DecodeRepeatedFloat32" .}}
+    {{- else if eq .Index 14}}
+        {{template "DecodeRepeatedFloat64" .}}
+    {{- else if eq .Index 24}}
+        {{template "DecodeRepeatedString" .}}
+    {{- else if eq .Index 25}}
+        {{template "DecodeRepeatedMessage" .}}
+    {{- else}}
+        return fmt.Errorf("unsupported index type %T", x.{{.Name}})
+    {{- end}}
+{{- end}}
+
+{{- define "DecodeBytes"}}
+bytes, err := protolizer.BytesDecode(buffer)
+if err != nil {
+    return err
+}
+x.{{.Name}} = bytes
+return nil
+{{- end}}
+
+{{- define "DecodeRepeatedBool"}}
+bytes, err := protolizer.BytesDecode(buffer)
+if err != nil {
+    return err
+}
+innerBuffer := protolizer.Alloc(0)
+innerBuffer.Write(bytes)
+defer protolizer.Dealloc(innerBuffer)
+for innerBuffer.Len() != 0 {
+    value, err := protolizer.BooleanDecoder(field, innerBuffer)
+    if err != nil {
+        return err
+    }
+    x.{{.Name}} = append(x.{{.Name}}, {{.BaseType}}(value))
+}
+return nil
+{{- end}}
+
+{{- define "DecodeRepeatedSigned"}}
+bytes, err := protolizer.BytesDecode(buffer)
+if err != nil {
+    return err
+}
+innerBuffer := protolizer.Alloc(0)
+innerBuffer.Write(bytes)
+defer protolizer.Dealloc(innerBuffer)
+for innerBuffer.Len() != 0 {
+    value, err := protolizer.SignedNumberDecoder(field, innerBuffer)
+    if err != nil {
+        return err
+    }
+    x.{{.Name}} = append(x.{{.Name}}, {{.BaseType}}(value))
+}
+return nil
+{{- end}}
+
+{{- define "DecodeRepeatedUnsigned"}}
+bytes, err := protolizer.BytesDecode(buffer)
+if err != nil {
+    return err
+}
+innerBuffer := protolizer.Alloc(0)
+innerBuffer.Write(bytes)
+defer protolizer.Dealloc(innerBuffer)
+for innerBuffer.Len() != 0 {
+    value, err := protolizer.UnsignedNumberDecoder(field, innerBuffer)
+    if err != nil {
+        return err
+    }
+    x.{{.Name}} = append(x.{{.Name}}, {{.BaseType}}(value))
+}
+return nil
+{{- end}}
+
+{{- define "DecodeRepeatedFloat32"}}
+bytes, err := protolizer.BytesDecode(buffer)
+if err != nil {
+    return err
+}
+innerBuffer := protolizer.Alloc(0)
+innerBuffer.Write(bytes)
+defer protolizer.Dealloc(innerBuffer)
+for innerBuffer.Len() != 0 {
+    value, err := protolizer.FloatDecoder(field, innerBuffer)
+    if err != nil {
+        return err
+    }
+    x.{{.Name}} = append(x.{{.Name}}, {{.BaseType}}(value))
+}
+return nil
+{{- end}}
+
+{{- define "DecodeRepeatedFloat64"}}
+bytes, err := protolizer.BytesDecode(buffer)
+if err != nil {
+    return err
+}
+innerBuffer := protolizer.Alloc(0)
+innerBuffer.Write(bytes)
+defer protolizer.Dealloc(innerBuffer)
+for innerBuffer.Len() != 0 {
+    value, err := protolizer.DoubleDecoder(field, innerBuffer)
+    if err != nil {
+        return err
+    }
+    x.{{.Name}} = append(x.{{.Name}}, {{.BaseType}}(value))
+}
+return nil
+{{- end}}
+
+{{- define "DecodeRepeatedString"}}
+i := 0
+for {
+    if i != 0 {
+        i, _, read, err := protolizer.TagPeek(buffer)
+        if err != nil {
+            if err == io.EOF {
+                return nil
+            }
+            return err
+        }
+        if i != int32(field.Tags.Protobuf.FieldNum) {
+            break
+        }
+        read()
+    }
+    i++
+    value, err := protolizer.StringDecode(buffer)
+    if err != nil {
+        return nil
+    }
+    x.{{.Name}} = append(x.{{.Name}}, {{.BaseType}}(value))
+}
+return nil
+{{- end}}
+
+{{- define "DecodeRepeatedMessage"}}
+i := 0
+for {
+    if i != 0 {
+        i, _, read, err := protolizer.TagPeek(buffer)
+        if err != nil {
+            if err == io.EOF {
+                return nil
+            }
+            return err
+        }
+        if i != int32(field.Tags.Protobuf.FieldNum) {
+            break
+        }
+        read()
+    }
+    i++
+    data, err := protolizer.BytesDecode(buffer)
+    if err != nil {
+        return err
+    }
+    bytes := protolizer.Alloc(0)
+    value := new({{.BaseType}})
+    bytes.Write(data)
+    err = protolizer.FastUnmarshal(data, value)
+    protolizer.Dealloc(bytes)
+    if err != nil {
+        return nil
+    }
+    x.{{.Name}} = append(x.{{.Name}}, *value)
+}
+return nil
+{{- end}}
