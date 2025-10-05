@@ -73,8 +73,12 @@ type (
 		TypeName   string
 	}
 	File struct {
-		Messages []*Message
-		Enums    []*Enum
+		PackageName string
+		FilePath    string
+		Source      string
+		Options     map[string]any
+		Messages    []*Message
+		Enums       []*Enum
 	}
 	AST struct {
 		Files []*File
@@ -133,6 +137,18 @@ func Compile(file string) (*AST, error) {
 
 func GetFile(file linker.File) (*File, error) {
 	out := new(File)
+	_, out.Source = path.Split(strings.ReplaceAll(file.Path(), "\\", "/"))
+	opts, ok := file.Options().(*descriptorpb.FileOptions)
+	if ok {
+		out.FilePath = opts.GetGoPackage()
+		_, out.PackageName = path.Split(out.FilePath)
+		out.Options = make(map[string]any)
+		proto.RangeExtensions(opts, func(et protoreflect.ExtensionType, a any) bool {
+			out.Options[fmt.Sprintf("%s.%s", et.TypeDescriptor().Parent().FullName().Name(), et.TypeDescriptor().FullName().Name())] = a
+			return true
+		})
+	}
+
 	messages, err := GetMessages(file.Messages(), nil)
 	if err != nil {
 		return nil, err

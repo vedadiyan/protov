@@ -3,6 +3,7 @@ package compiler
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"testing"
 	"text/template"
 )
@@ -33,6 +34,8 @@ func TestCompile(t *testing.T) {
 	}
 	_r := out.String()
 	os.WriteFile("test.go", []byte(_r), os.ModePerm)
+	cmd := exec.Command("gofmt", "-w", "test.go")
+	cmd.Run()
 }
 
 // func TestT(t *testing.T) {
