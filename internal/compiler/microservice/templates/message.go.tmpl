@@ -119,7 +119,7 @@ func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error 
                             if i != 0 {
                                 buffer.Write(tag.Bytes())
                             }
-                            data, err := protolizer.FastInlineMarshal(x.{{$field.Name}})
+                            data, err := protolizer.FastInlineMarshal(&value)
                             if err != nil {
                                 return err
                             }
@@ -405,7 +405,7 @@ func (x *{{.Name}}) Decode(field *protolizer.Field, buffer *bytes.Buffer) error 
                             if err != nil {
                                 return nil
                             }
-                            x.{{$field.Name}} = append(x.{{$field.Name}}, {{$field.Type}}(value))
+                            x.{{$field.Name}} = append(x.{{$field.Name}}, *value)
                         }
                         return nil
                     {{- else }}

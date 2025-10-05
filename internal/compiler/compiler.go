@@ -288,7 +288,7 @@ func GetKind(fieldDescriptor protoreflect.FieldDescriptor) string {
 		return fmt.Sprintf("map[%s]%s", GetKind(fieldDescriptor.MapKey()), GetKind(fieldDescriptor.MapValue()))
 	}
 	flags := ""
-	if fieldDescriptor.HasOptionalKeyword() {
+	if fieldDescriptor.HasOptionalKeyword() || fieldDescriptor.Kind() == protoreflect.MessageKind {
 		flags = "*"
 	}
 	if fieldDescriptor.IsList() {
@@ -361,7 +361,8 @@ func GetKind(fieldDescriptor protoreflect.FieldDescriptor) string {
 		}
 	case protoreflect.MessageKind:
 		{
-			return fmt.Sprintf("*%s", fieldDescriptor.Message().Name())
+
+			return fmt.Sprintf("%s%s", flags, fieldDescriptor.Message().Name())
 		}
 	case protoreflect.GroupKind:
 		{
