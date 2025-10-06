@@ -17,4 +17,8 @@
     {{- range $message := .Messages}}
         {{- template "Message" $message }}
     {{- end}}
+
+    {{- range $enum := .Enums}}
+        {{- template "Enum" $enum }}
+    {{- end}}
 {{- end }}

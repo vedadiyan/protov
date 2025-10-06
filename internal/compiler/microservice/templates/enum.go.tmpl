@@ -1,0 +1,9 @@
+{{- define "Enum" }}
+type {{.Name}} int
+{{$EnumName:=.Name}}
+const(
+{{- range $field := .Values}}
+    {{$EnumName}}_{{$field.Name}} {{$EnumName}} = {{$field.Number}}
+{{- end }}
+)
+{{- end }}
