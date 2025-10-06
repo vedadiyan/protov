@@ -127,6 +127,23 @@ type Message struct {
 	TypeName   string
 }
 
+// Message represents a protocol buffer service.
+type Service struct {
+	Name       string
+	Options    map[string]any
+	Descriptor string
+	Rpcs       []*Rpc
+}
+
+// Message represents a protocol buffer rpc.
+type Rpc struct {
+	Name       string
+	Options    map[string]any
+	Descriptor string
+	Input      string
+	Output     string
+}
+
 // File represents a compiled protocol buffer file.
 type File struct {
 	PackageName string
@@ -134,6 +151,7 @@ type File struct {
 	Source      string
 	Options     map[string]any
 	Messages    []*Message
+	Services    []*Service
 	Enums       []*Enum
 }
 
@@ -203,6 +221,12 @@ func GetFile(filePath string, file linker.File) (*File, error) {
 		return nil, fmt.Errorf("failed to get messages: %w", err)
 	}
 	out.Messages = messages
+
+	services, err := GetServices(file.Services())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get messages: %w", err)
+	}
+	out.Services = services
 
 	enums, err := GetEnums(file.Enums())
 	if err != nil {
@@ -399,6 +423,100 @@ func getEnum(enum protoreflect.EnumDescriptor) (*Enum, error) {
 		out.Values = append(out.Values, &EnumValue{
 			Name:   string(evd.Name()),
 			Number: int(evd.Number()),
+		})
+	}
+
+	return out, nil
+}
+
+// GetServices extracts service information from service descriptors.
+func GetServices(md protoreflect.ServiceDescriptors) ([]*Service, error) {
+	l := md.Len()
+	if l == 0 {
+		return nil, nil
+	}
+
+	out := make([]*Service, 0, l)
+
+	for i := 0; i < l; i++ {
+		serviceDescriptor := md.Get(i)
+		name := serviceDescriptor.Name()
+
+		service, err := GetService(serviceDescriptor)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get message %s: %w", name, err)
+		}
+
+		// Encode descriptor as base64 JSON
+		protoDescriptor := protoutil.ProtoFromServiceDescriptor(serviceDescriptor)
+		jsonData, err := protojson.Marshal(protoDescriptor)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal descriptor for %s: %w", name, err)
+		}
+		service.Descriptor = base64.StdEncoding.EncodeToString(jsonData)
+
+		out = append(out, service)
+	}
+
+	return out, nil
+}
+
+// GetService creates a Service from service descriptors.
+func GetService(service protoreflect.ServiceDescriptor) (*Service, error) {
+	methods := service.Methods()
+
+	l := methods.Len()
+
+	out := &Service{
+		Name: string(service.Name()),
+		Rpcs: make([]*Rpc, 0, l),
+	}
+
+	if opts, ok := service.Options().(*descriptorpb.MessageOptions); ok {
+		proto.RangeExtensions(opts, func(et protoreflect.ExtensionType, a any) bool {
+			key := fmt.Sprintf("%s.%s",
+				et.TypeDescriptor().Parent().FullName().Name(),
+				et.TypeDescriptor().FullName().Name())
+			out.Options[key] = a
+			return true
+		})
+	}
+
+	if l == 0 {
+		return out, nil
+	}
+
+	for i := 0; i < l; i++ {
+		methodDescriptor := methods.Get(i)
+
+		rpc, err := GetRpc(methodDescriptor)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get field %s: %w", methodDescriptor.Name(), err)
+		}
+		out.Rpcs = append(out.Rpcs, rpc)
+	}
+
+	return out, nil
+}
+
+// GetRpc creates a Rpc from a method descriptor.
+func GetRpc(fd protoreflect.MethodDescriptor) (*Rpc, error) {
+	input := fd.Input().FullName()
+	output := fd.Output().FullName()
+
+	out := &Rpc{
+		Name:   string(fd.Name()),
+		Input:  string(input),
+		Output: string(output),
+	}
+
+	if opts, ok := fd.Options().(*descriptorpb.MethodOptions); ok {
+		proto.RangeExtensions(opts, func(et protoreflect.ExtensionType, a any) bool {
+			key := fmt.Sprintf("%s.%s",
+				et.TypeDescriptor().Parent().FullName().Name(),
+				et.TypeDescriptor().FullName().Name())
+			out.Options[key] = a
+			return true
 		})
 	}
 
