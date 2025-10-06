@@ -305,10 +305,11 @@ func GetMessage(message protoreflect.MessageDescriptor) (*Message, error) {
 			key := fmt.Sprintf("%s.%s",
 				et.TypeDescriptor().Parent().FullName().Name(),
 				et.TypeDescriptor().FullName().Name())
+			key = toGoName(key)
 			if v, ok := a.(*dynamicpb.Message); ok {
 				data := make(map[string]any)
 				v.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-					data[string(fd.Name())] = getInnerOptions(v.Interface())
+					data[toGoName(string(fd.Name()))] = getInnerOptions(v.Interface())
 					return true
 				})
 				out.Options[key] = data
@@ -489,10 +490,11 @@ func GetService(service protoreflect.ServiceDescriptor) (*Service, error) {
 			key := fmt.Sprintf("%s.%s",
 				et.TypeDescriptor().Parent().FullName().Name(),
 				et.TypeDescriptor().FullName().Name())
+			key = toGoName(key)
 			if v, ok := a.(*dynamicpb.Message); ok {
 				data := make(map[string]any)
 				v.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-					data[string(fd.Name())] = getInnerOptions(v.Interface())
+					data[toGoName(string(fd.Name()))] = getInnerOptions(v.Interface())
 					return true
 				})
 				out.Options[key] = data
@@ -522,8 +524,8 @@ func GetService(service protoreflect.ServiceDescriptor) (*Service, error) {
 
 // GetRpc creates a Rpc from a method descriptor.
 func GetRpc(fd protoreflect.MethodDescriptor) (*Rpc, error) {
-	input := fd.Input().FullName()
-	output := fd.Output().FullName()
+	input := fd.Input().Name()
+	output := fd.Output().Name()
 
 	out := &Rpc{
 		Name:    string(fd.Name()),
@@ -537,10 +539,11 @@ func GetRpc(fd protoreflect.MethodDescriptor) (*Rpc, error) {
 			key := fmt.Sprintf("%s.%s",
 				et.TypeDescriptor().Parent().FullName().Name(),
 				et.TypeDescriptor().FullName().Name())
+			key = toGoName(key)
 			if v, ok := a.(*dynamicpb.Message); ok {
 				data := make(map[string]any)
 				v.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-					data[string(fd.Name())] = getInnerOptions(v.Interface())
+					data[toGoName(string(fd.Name()))] = getInnerOptions(v.Interface())
 					return true
 				})
 				out.Options[key] = data
@@ -560,7 +563,7 @@ func getInnerOptions(v any) any {
 	if v, ok := v.(*dynamicpb.Message); ok {
 		out := make(map[string]any)
 		v.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-			out[string(fd.Name())] = getInnerOptions(v.Interface())
+			out[toGoName(string(fd.Name()))] = getInnerOptions(v.Interface())
 			return true
 		})
 		return out
@@ -844,7 +847,9 @@ func toGoName(s string) string {
 		return ""
 	}
 
-	segments := strings.Split(s, "_")
+	segments := strings.FieldsFunc(s, func(r rune) bool {
+		return r == '_' || r == '.'
+	})
 	for i, segment := range segments {
 		if segment == "" {
 			continue
