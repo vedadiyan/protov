@@ -21,6 +21,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/dynamicpb"
 )
 
 // Format is the serialization format used to represent the default value.
@@ -78,7 +79,8 @@ func (r *Resolver) accessor(f string) (io.ReadCloser, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		// Fallback to standard protoc include directory
-		fallbackPath := path.Join(os.Getenv("PROTOV_HOME"), cleanPath)
+		home := os.Getenv("PROTOV_HOME")
+		fallbackPath := path.Join(home, cleanPath)
 		data, err = os.ReadFile(fallbackPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read %s from %s or %s: %w", f, filePath, fallbackPath, err)
@@ -303,6 +305,15 @@ func GetMessage(message protoreflect.MessageDescriptor) (*Message, error) {
 			key := fmt.Sprintf("%s.%s",
 				et.TypeDescriptor().Parent().FullName().Name(),
 				et.TypeDescriptor().FullName().Name())
+			if v, ok := a.(*dynamicpb.Message); ok {
+				data := make(map[string]any)
+				v.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+					data[string(fd.Name())] = getInnerOptions(v.Interface())
+					return true
+				})
+				out.Options[key] = data
+				return true
+			}
 			out.Options[key] = a
 			return true
 		})
@@ -468,15 +479,25 @@ func GetService(service protoreflect.ServiceDescriptor) (*Service, error) {
 	l := methods.Len()
 
 	out := &Service{
-		Name: string(service.Name()),
-		Rpcs: make([]*Rpc, 0, l),
+		Name:    string(service.Name()),
+		Rpcs:    make([]*Rpc, 0, l),
+		Options: make(map[string]any),
 	}
 
-	if opts, ok := service.Options().(*descriptorpb.MessageOptions); ok {
+	if opts, ok := service.Options().(*descriptorpb.ServiceOptions); ok {
 		proto.RangeExtensions(opts, func(et protoreflect.ExtensionType, a any) bool {
 			key := fmt.Sprintf("%s.%s",
 				et.TypeDescriptor().Parent().FullName().Name(),
 				et.TypeDescriptor().FullName().Name())
+			if v, ok := a.(*dynamicpb.Message); ok {
+				data := make(map[string]any)
+				v.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+					data[string(fd.Name())] = getInnerOptions(v.Interface())
+					return true
+				})
+				out.Options[key] = data
+				return true
+			}
 			out.Options[key] = a
 			return true
 		})
@@ -505,9 +526,10 @@ func GetRpc(fd protoreflect.MethodDescriptor) (*Rpc, error) {
 	output := fd.Output().FullName()
 
 	out := &Rpc{
-		Name:   string(fd.Name()),
-		Input:  string(input),
-		Output: string(output),
+		Name:    string(fd.Name()),
+		Input:   string(input),
+		Output:  string(output),
+		Options: make(map[string]any),
 	}
 
 	if opts, ok := fd.Options().(*descriptorpb.MethodOptions); ok {
@@ -515,6 +537,15 @@ func GetRpc(fd protoreflect.MethodDescriptor) (*Rpc, error) {
 			key := fmt.Sprintf("%s.%s",
 				et.TypeDescriptor().Parent().FullName().Name(),
 				et.TypeDescriptor().FullName().Name())
+			if v, ok := a.(*dynamicpb.Message); ok {
+				data := make(map[string]any)
+				v.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+					data[string(fd.Name())] = getInnerOptions(v.Interface())
+					return true
+				})
+				out.Options[key] = data
+				return true
+			}
 			out.Options[key] = a
 			return true
 		})
@@ -524,6 +555,18 @@ func GetRpc(fd protoreflect.MethodDescriptor) (*Rpc, error) {
 }
 
 // Helper functions
+
+func getInnerOptions(v any) any {
+	if v, ok := v.(*dynamicpb.Message); ok {
+		out := make(map[string]any)
+		v.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+			out[string(fd.Name())] = getInnerOptions(v.Interface())
+			return true
+		})
+		return out
+	}
+	return v
+}
 
 func canBeIgnored(fd protoreflect.FieldDescriptor) (bool, string) {
 	if fd.IsMap() {
