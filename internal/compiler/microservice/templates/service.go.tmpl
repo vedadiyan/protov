@@ -30,7 +30,7 @@ import (
   }
   type {{$service.Name}}Service interface {
       {{- range $rpc := $service.Rpcs}}
-      {{$rpc.Name}}(context.Context, *protolizer.Request[{{$rpc.Input}}])(*protolizer.Response[{{$rpc.Output}}], error)
+      {{$rpc.Name}}(context.Context, *protolizer.Request[{{$rpc.Input}}], {{$rpc.Name}}RpcOptions)(*protolizer.Response[{{$rpc.Output}}], error)
       {{- end }}
   }        
 
