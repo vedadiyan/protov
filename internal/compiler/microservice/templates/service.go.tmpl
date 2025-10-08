@@ -15,23 +15,25 @@ import (
 )
 
 {{- range $service := .Services }}
-    func {{$service.Name}}() {
-        type ServiceOptions struct {
-            {{- template "parseMap" $service.Options }}
-        }
-       {{- range $rpc := $service.Rpcs}}
-            type {{$rpc.Name}}RpcOptions struct {
-                {{- template "parseMap" $rpc.Options }}
-            }
-        {{- end }}
-        type {{$service.Name}} interface {
-            Init({{$service.Name}}Options) error
-            {{- range $rpc := $service.Rpcs}}
-            {{$rpc.Name}}({{$rpc.Input}})*{{$rpc.Output}}
-            {{- end }}
-        }        
+  type {{$service.Name}}ServiceOptions struct {
+      {{- template "parseMap" $service.Options }}
+  }
+  {{- range $rpc := $service.Rpcs}}
+      type {{$rpc.Name}}RpcOptions struct {
+          {{- template "parseMap" $rpc.Options }}
+      }
+  {{- end }}
+  type {{$service.Name}}Server interface {
+    Start({{$service.Name}}Options) error
+    Stop() error
+    Handle(func(context.Context, *protolizer.Request[protolizer.Reflected])(*protolizer.Response[protolizer.Reflected], error), any)
+  }
+  type {{$service.Name}}Service interface {
+      {{- range $rpc := $service.Rpcs}}
+      {{$rpc.Name}}(context.Context, *protolizer.Request[{{$rpc.Input}}])(*protolizer.Response[{{$rpc.Output}}], error)
+      {{- end }}
+  }        
 
-    }
 {{- end }}
 {{- end }}
 
