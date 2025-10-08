@@ -26,7 +26,7 @@ import (
   type {{$service.Name}}Server interface {
     Start({{$service.Name}}Options) error
     Stop() error
-    Handle(func(context.Context, *protolizer.Request[protolizer.Reflected])(*protolizer.Response[protolizer.Reflected], error), any)
+    Handle(string, func(context.Context, *protolizer.Request[protolizer.Reflected])(*protolizer.Response[protolizer.Reflected], error))
   }
   type {{$service.Name}}Service interface {
       {{- range $rpc := $service.Rpcs}}
