@@ -42,7 +42,7 @@ import (
     func Get{{$rpc.Name}}RpcOptions() *{{$service.Name}}RpcOptions {
       return &{{$service.Name}}RpcOptions{ 
         Name: {{$rpc.Name}},
-        {{- template "parseMapValues" $rpc.Options }},
+        {{- template "parseMapValues" $rpc.Options }}
       }
     }
   {{- end }}
