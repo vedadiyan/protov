@@ -1,0 +1,15 @@
+package compiler
+
+import "context"
+
+type Server interface {
+	Handle(path string, handleFunc func(ctx context.Context, request any) (any, error))
+}
+
+type TestService interface {
+	Get(context.Context, any) (any, error)
+}
+
+func Bootstrap(server Server, service TestService) {
+	server.Handle("", service.Get)
+}
