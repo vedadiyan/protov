@@ -94,7 +94,7 @@ import (
   struct { 
     {{- range $key, $value := . }}
       {{- if eq (printf "%T" $value) "map[string]interface {}" }}
-        {{$key }}  {{ template "parseMapValues2" -}};
+        {{$key }}  {{ template "parseMapValues2" $value}};
       {{- else }}
         {{$key}} {{(printf "%T" $value)}};
       {{- end }}
