@@ -135,6 +135,7 @@ type Service struct {
 	Options    map[string]any
 	Descriptor string
 	Rpcs       []*Rpc
+	RpcOptions map[string]any
 }
 
 // Message represents a protocol buffer rpc.
@@ -519,7 +520,24 @@ func GetService(service protoreflect.ServiceDescriptor) (*Service, error) {
 		out.Rpcs = append(out.Rpcs, rpc)
 	}
 
+	out.RpcOptions = make(map[string]any)
+	for _, rpc := range out.Rpcs {
+		ConcatOptions(out.RpcOptions, rpc.Options)
+	}
+
 	return out, nil
+}
+
+func ConcatOptions(dest map[string]any, src map[string]any) {
+	for key, value := range src {
+		if value, ok := value.(map[string]any); ok {
+			v := make(map[string]any)
+			dest[key] = v
+			ConcatOptions(v, value)
+			continue
+		}
+		dest[key] = fmt.Sprintf("%T", value)
+	}
 }
 
 // GetRpc creates a Rpc from a method descriptor.
