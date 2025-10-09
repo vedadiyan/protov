@@ -18,22 +18,42 @@ import (
   type {{$service.Name}}ServiceOptions struct {
       {{- template "parseMap" $service.Options }}
   }
+
   type {{$service.Name}}RpcOptions struct {
     Name string
     Options struct {
       {{- template "parseMap" $service.RpcOptions }}
     }
   }
+
   type {{$service.Name}}Server interface {
     Start({{$service.Name}}Options) error
     Stop() error
     Handle({{$service.Name}}RpcOptions, func(context.Context, protolizer.Reflected)(protolizer.Reflected, error))
   }
+
   type {{$service.Name}}Service interface {
       {{- range $rpc := $service.Rpcs}}
       {{$rpc.Name}}(context.Context, *{{$rpc.Input}}) (*{{$rpc.Output}}, error)
       {{- end }}
   }        
+
+  {{- range $rpc := $service.Rpcs}}
+    func Get{{$rpc.Name}}RpcOptions() *{{$service.Name}}RpcOptions {
+      return &{{$service.Name}}RpcOptions{ 
+        Name: {{$rpc.Name}},
+        {{- template "parseMapValues" $rpc.Options }},
+      }
+    }
+  {{- end }}
+
+  func Build{{$service.Name}}(server {{$service.Name}}Server, service {{$service.Name}}Service) {
+      {{- range $rpc := $service.Rpcs}}
+        server.Handle(nil, func(ctx context.Context, in protolizer.Reflected)(protolizer.Reflected, error) {
+          return service.{{$rpc.Name}}(ctx, in.(*{{$rpc.Input}}))
+        })
+      {{- end }}
+  }
 
 {{- end }}
 {{- end }}
@@ -49,4 +69,35 @@ import (
       {{$key}} {{(printf "%T" $value)}}
     {{- end }}
   {{- end }}
+{{- end }}
+
+
+
+
+{{- define "parseMapValues" -}}
+  {{- range $key, $value := . }}
+    {{- if eq (printf "%T" $value) "map[string]interface {}" }}
+       {{$key}}: {{- template "parseMapValues2" $value }} { 
+          {{- template "parseMapValues" $value }} 
+        },
+    {{- else }}
+      {{- if eq (printf "%T" $value) "string" }}
+        {{$key}}: "{{$value}}",
+      {{- else }}
+        {{$key}}: {{$value}},
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+{{- define "parseMapValues2" -}}
+  struct { 
+    {{- range $key, $value := . }}
+      {{- if eq (printf "%T" $value) "map[string]interface {}" }}
+        {{$key }}  {{ template "parseMapValues2" -}};
+      {{- else }}
+        {{$key}} {{(printf "%T" $value)}};
+      {{- end }}
+    {{- end }}
+  } 
 {{- end }}

@@ -140,11 +140,12 @@ type Service struct {
 
 // Message represents a protocol buffer rpc.
 type Rpc struct {
-	Name       string
-	Options    map[string]any
-	Descriptor string
-	Input      string
-	Output     string
+	Name        string
+	Options     map[string]any
+	Descriptor  string
+	Input       string
+	Output      string
+	ServiceName string
 }
 
 // File represents a compiled protocol buffer file.
@@ -513,7 +514,7 @@ func GetService(service protoreflect.ServiceDescriptor) (*Service, error) {
 	for i := 0; i < l; i++ {
 		methodDescriptor := methods.Get(i)
 
-		rpc, err := GetRpc(methodDescriptor)
+		rpc, err := GetRpc(string(service.Name()), methodDescriptor)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get field %s: %w", methodDescriptor.Name(), err)
 		}
@@ -541,15 +542,16 @@ func ConcatOptions(dest map[string]any, src map[string]any) {
 }
 
 // GetRpc creates a Rpc from a method descriptor.
-func GetRpc(fd protoreflect.MethodDescriptor) (*Rpc, error) {
+func GetRpc(serviceName string, fd protoreflect.MethodDescriptor) (*Rpc, error) {
 	input := fd.Input().Name()
 	output := fd.Output().Name()
 
 	out := &Rpc{
-		Name:    string(fd.Name()),
-		Input:   string(input),
-		Output:  string(output),
-		Options: make(map[string]any),
+		Name:        string(fd.Name()),
+		Input:       string(input),
+		Output:      string(output),
+		Options:     make(map[string]any),
+		ServiceName: serviceName,
 	}
 
 	if opts, ok := fd.Options().(*descriptorpb.MethodOptions); ok {
