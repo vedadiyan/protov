@@ -30,12 +30,12 @@ import (
   type {{$service.Name}}Server interface {
     Start({{$service.Name}}ServiceOptions) error
     Stop() error
-    Handle(*{{$service.Name}}RpcOptions, func(context.Context, protolizer.Reflected)(protolizer.Reflected, error))
+    Handle({{$service.Name}}RpcOptions, func(context.Context, protolizer.Reflected)(protolizer.Reflected, error))
   }
 
   type {{$service.Name}}Service interface {
       {{- range $rpc := $service.Rpcs}}
-      {{$rpc.Name}}(context.Context, *{{$rpc.Input}}) (*{{$rpc.Output}}, error)
+      {{$rpc.Name}}(context.Context, *{{$rpc.Input}}, {{$service.Name}}RpcOptions) (*{{$rpc.Output}}, error)
       {{- end }}
   }        
 
@@ -54,8 +54,9 @@ import (
 
   func Build{{$service.Name}}(server {{$service.Name}}Server, service {{$service.Name}}Service) {
       {{- range $rpc := $service.Rpcs}}
-        server.Handle(Get{{$service.Name}}{{$rpc.Name}}RpcOptions(), func(ctx context.Context, in protolizer.Reflected)(protolizer.Reflected, error) {
-          return service.{{$rpc.Name}}(ctx, in.(*{{$rpc.Input}}))
+        {{$rpc.Name}}Options := Get{{$service.Name}}{{$rpc.Name}}RpcOptions()
+        server.Handle(*{{$rpc.Name}}Options, func(ctx context.Context, in protolizer.Reflected)(protolizer.Reflected, error) {
+          return service.{{$rpc.Name}}(ctx, in.(*{{$rpc.Input}}), *{{$rpc.Name}}Options)
         })
       {{- end }}
   }
