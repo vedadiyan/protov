@@ -17,7 +17,9 @@ import (
 
 {{- range $service := .Services }}
   type {{$service.Name}}ServiceOptions struct {
+    Options struct {
       {{- template "parseMap" $service.Options }}
+    }
   }
 
   type {{$service.Name}}RpcOptions struct {
@@ -27,10 +29,15 @@ import (
     }
   }
 
+  type {{$service.Name}}HandlerOptions struct{
+    ServiceOptions {{$service.Name}}ServiceOptions
+    RpcOptions {{$service.Name}}RpcOptions
+  }
+
   type {{$service.Name}}Server interface {
     Start({{$service.Name}}ServiceOptions) error
     Stop() error
-    Handle({{$service.Name}}RpcOptions, func(context.Context, protolizer.Reflected)(protolizer.Reflected, error))
+    Handle({{$service.Name}}HandlerOptions, func(context.Context, protolizer.Reflected)(protolizer.Reflected, error))
   }
 
   type {{$service.Name}}Service interface {
@@ -38,6 +45,16 @@ import (
       {{$rpc.Name}}(context.Context, *{{$rpc.Input}}, {{$service.Name}}RpcOptions) (*{{$rpc.Output}}, error)
       {{- end }}
   }        
+
+  func Get{{$service.Name}}ServiceOptions() *{{$service.Name}}ServiceOptions {
+      return &{{$service.Name}}ServiceOptions{ 
+        Options: struct { 
+          {{- template "parseMap" $service.Options }} 
+        } {
+            {{- template "parseMapValues" $service.Options }}
+          },
+      }
+    }
 
   {{- range $rpc := $service.Rpcs}}
     func Get{{$service.Name}}{{$rpc.Name}}RpcOptions() *{{$service.Name}}RpcOptions {
@@ -54,9 +71,12 @@ import (
 
   func Build{{$service.Name}}(server {{$service.Name}}Server, service {{$service.Name}}Service) {
       {{- range $rpc := $service.Rpcs}}
-        {{$rpc.Name}}Options := Get{{$service.Name}}{{$rpc.Name}}RpcOptions()
-        server.Handle(*{{$rpc.Name}}Options, func(ctx context.Context, in protolizer.Reflected)(protolizer.Reflected, error) {
-          return service.{{$rpc.Name}}(ctx, in.(*{{$rpc.Input}}), *{{$rpc.Name}}Options)
+        {{$service.Name}}HandlerOptions := {{$service.Name}}HandlerOptions {
+          ServiceOptions: *Get{{$service.Name}}ServiceOptions(),
+          RpcOptions:  *Get{{$service.Name}}{{$rpc.Name}}RpcOptions(),
+        }
+        server.Handle({{$service.Name}}HandlerOptions, func(ctx context.Context, in protolizer.Reflected)(protolizer.Reflected, error) {
+          return service.{{$rpc.Name}}(ctx, in.(*{{$rpc.Input}}), {{$service.Name}}HandlerOptions.RpcOptions)
         })
       {{- end }}
   }
