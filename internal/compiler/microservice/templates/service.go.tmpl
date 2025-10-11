@@ -70,7 +70,11 @@ import (
         {{- template "parseMap" $value }}
       }
     {{- else }}
-      {{$key}} {{(printf "%T" $value)}}
+      {{- if eq (printf "%T" $value) "compiler.ByteString" }}
+         {{$key}} string
+      {{- else }}
+        {{$key}} {{(printf "%T" $value)}}
+      {{- end }}
     {{- end }}
   {{- end }}
 {{- end }}
@@ -89,6 +93,8 @@ import (
     {{- else }}
       {{- if eq (printf "%T" $value) "string" }}
         {{$key}}: "{{$value}}",
+      {{- else if eq (printf "%T" $value) "compiler.ByteString" }}
+        {{$key}}: string({{$value}}),
       {{- else }}
         {{$key}}: {{$value}},
       {{- end }}

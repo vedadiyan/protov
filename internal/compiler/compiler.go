@@ -19,6 +19,7 @@ import (
 	"github.com/bufbuild/protocompile/protoutil"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
@@ -26,6 +27,7 @@ import (
 
 // Format is the serialization format used to represent the default value.
 type Format int
+type ByteString string
 
 const (
 	_ Format = iota
@@ -79,7 +81,7 @@ func (r *Resolver) accessor(f string) (io.ReadCloser, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		// Fallback to standard protoc include directory
-		home := os.Getenv("PROTOV_HOME")
+		home := "C:\\protoc\\include"
 		fallbackPath := path.Join(home, cleanPath)
 		data, err = os.ReadFile(fallbackPath)
 		if err != nil {
@@ -150,6 +152,7 @@ type Rpc struct {
 
 // File represents a compiled protocol buffer file.
 type File struct {
+	Dir         string
 	PackageName string
 	FilePath    string
 	Source      string
@@ -157,6 +160,7 @@ type File struct {
 	Messages    []*Message
 	Services    []*Service
 	Enums       []*Enum
+	Comments    map[string]string
 }
 
 // AST represents the complete abstract syntax tree of compiled files.
@@ -173,7 +177,7 @@ func Compile(file string) (*AST, error) {
 	var symbols linker.Symbols
 
 	compiler := protocompile.Compiler{
-		SourceInfoMode: protocompile.SourceInfoExtraOptionLocations,
+		SourceInfoMode: protocompile.SourceInfoExtraOptionLocations | protocompile.SourceInfoExtraComments,
 		Resolver:       NewResolver(dir),
 		Symbols:        &symbols,
 		Reporter:       &report,
@@ -189,7 +193,7 @@ func Compile(file string) (*AST, error) {
 	}
 
 	for i, linkedFile := range linkedFiles {
-		fileAST, err := GetFile(normalizedFile, linkedFile)
+		fileAST, err := GetFile(dir, normalizedFile, linkedFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to process file %d: %w", i, err)
 		}
@@ -200,12 +204,23 @@ func Compile(file string) (*AST, error) {
 }
 
 // GetFile extracts file information from a linked file.
-func GetFile(filePath string, file linker.File) (*File, error) {
+func GetFile(dir string, filePath string, file linker.File) (*File, error) {
 	out := &File{
 		Options: make(map[string]any),
 	}
-
+	out.Dir = dir
 	_, out.Source = path.Split(filePath)
+	out.Comments = make(map[string]string)
+	protodesc := protodesc.ToFileDescriptorProto(file)
+	for _, i := range protodesc.SourceCodeInfo.Location {
+		if i.LeadingComments != nil {
+			path := file.SourceLocations().ByPath(i.Path).Path.String()
+			value := strings.TrimRight(*i.LeadingComments, "\r\n")
+			value = strings.TrimRight(value, " ")
+			value = strings.TrimLeft(value, " ")
+			out.Comments[path] = value
+		}
+	}
 
 	if opts, ok := file.Options().(*descriptorpb.FileOptions); ok {
 		out.FilePath = opts.GetGoPackage()
@@ -220,19 +235,19 @@ func GetFile(filePath string, file linker.File) (*File, error) {
 		})
 	}
 
-	messages, err := GetMessages(file.Messages(), nil)
+	messages, err := out.GetMessages(file.Messages(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get messages: %w", err)
 	}
 	out.Messages = messages
 
-	services, err := GetServices(file.Services())
+	services, err := out.GetServices(file.Services())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get messages: %w", err)
 	}
 	out.Services = services
 
-	enums, err := GetEnums(file.Enums())
+	enums, err := out.GetEnums(file.Enums())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get enums: %w", err)
 	}
@@ -242,7 +257,7 @@ func GetFile(filePath string, file linker.File) (*File, error) {
 }
 
 // GetMessages extracts message information from message descriptors.
-func GetMessages(md protoreflect.MessageDescriptors, ignoreList Ignorables) ([]*Message, error) {
+func (file *File) GetMessages(md protoreflect.MessageDescriptors, ignoreList Ignorables) ([]*Message, error) {
 	l := md.Len()
 	if l == 0 {
 		return nil, nil
@@ -258,7 +273,7 @@ func GetMessages(md protoreflect.MessageDescriptors, ignoreList Ignorables) ([]*
 			continue
 		}
 
-		message, err := GetMessage(messageDescriptor)
+		message, err := file.GetMessage(messageDescriptor)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get message %s: %w", name, err)
 		}
@@ -275,7 +290,7 @@ func GetMessages(md protoreflect.MessageDescriptors, ignoreList Ignorables) ([]*
 
 		// Process nested messages recursively
 		if nestedMsgLen := messageDescriptor.Messages().Len(); nestedMsgLen != 0 {
-			nestedMessages, err := GetMessages(messageDescriptor.Messages(), message.Ignorables)
+			nestedMessages, err := file.GetMessages(messageDescriptor.Messages(), message.Ignorables)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get nested messages in %s: %w", name, err)
 			}
@@ -287,7 +302,7 @@ func GetMessages(md protoreflect.MessageDescriptors, ignoreList Ignorables) ([]*
 }
 
 // GetMessage creates a Message from field descriptors.
-func GetMessage(message protoreflect.MessageDescriptor) (*Message, error) {
+func (file *File) GetMessage(message protoreflect.MessageDescriptor) (*Message, error) {
 	name := message.Name()
 	fullName := message.FullName()
 
@@ -311,7 +326,7 @@ func GetMessage(message protoreflect.MessageDescriptor) (*Message, error) {
 			if v, ok := a.(*dynamicpb.Message); ok {
 				data := make(map[string]any)
 				v.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-					data[toGoName(string(fd.Name()))] = getInnerOptions(v.Interface())
+					data[toGoName(string(fd.Name()))] = file.getInnerOptions("", v.Interface())
 					return true
 				})
 				out.Options[key] = data
@@ -329,7 +344,7 @@ func GetMessage(message protoreflect.MessageDescriptor) (*Message, error) {
 	for i := 0; i < l; i++ {
 		fieldDescriptor := fields.Get(i)
 
-		field, err := GetField(fieldDescriptor)
+		field, err := file.GetField(fieldDescriptor)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get field %s: %w", fieldDescriptor.Name(), err)
 		}
@@ -344,7 +359,7 @@ func GetMessage(message protoreflect.MessageDescriptor) (*Message, error) {
 }
 
 // GetField creates a Field from a field descriptor.
-func GetField(fd protoreflect.FieldDescriptor) (*Field, error) {
+func (file *File) GetField(fd protoreflect.FieldDescriptor) (*Field, error) {
 	fieldType := getKind(fd)
 
 	out := &Field{
@@ -388,7 +403,7 @@ func GetField(fd protoreflect.FieldDescriptor) (*Field, error) {
 }
 
 // GetEnums extracts enum information from enum descriptors.
-func GetEnums(md protoreflect.EnumDescriptors) ([]*Enum, error) {
+func (file *File) GetEnums(md protoreflect.EnumDescriptors) ([]*Enum, error) {
 	l := md.Len()
 	if l == 0 {
 		return nil, nil
@@ -398,7 +413,7 @@ func GetEnums(md protoreflect.EnumDescriptors) ([]*Enum, error) {
 
 	for i := 0; i < l; i++ {
 		enumDescriptor := md.Get(i)
-		enum, err := getEnum(enumDescriptor)
+		enum, err := file.getEnum(enumDescriptor)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get enum %s: %w", enumDescriptor.Name(), err)
 		}
@@ -409,7 +424,7 @@ func GetEnums(md protoreflect.EnumDescriptors) ([]*Enum, error) {
 }
 
 // getEnum creates an Enum from enum value descriptors.
-func getEnum(enum protoreflect.EnumDescriptor) (*Enum, error) {
+func (file *File) getEnum(enum protoreflect.EnumDescriptor) (*Enum, error) {
 	name := enum.Name()
 	ed := enum.Values()
 	l := ed.Len()
@@ -444,7 +459,7 @@ func getEnum(enum protoreflect.EnumDescriptor) (*Enum, error) {
 }
 
 // GetServices extracts service information from service descriptors.
-func GetServices(md protoreflect.ServiceDescriptors) ([]*Service, error) {
+func (file *File) GetServices(md protoreflect.ServiceDescriptors) ([]*Service, error) {
 	l := md.Len()
 	if l == 0 {
 		return nil, nil
@@ -456,7 +471,7 @@ func GetServices(md protoreflect.ServiceDescriptors) ([]*Service, error) {
 		serviceDescriptor := md.Get(i)
 		name := serviceDescriptor.Name()
 
-		service, err := GetService(serviceDescriptor)
+		service, err := file.GetService(i, serviceDescriptor)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get message %s: %w", name, err)
 		}
@@ -476,7 +491,7 @@ func GetServices(md protoreflect.ServiceDescriptors) ([]*Service, error) {
 }
 
 // GetService creates a Service from service descriptors.
-func GetService(service protoreflect.ServiceDescriptor) (*Service, error) {
+func (file *File) GetService(n int, service protoreflect.ServiceDescriptor) (*Service, error) {
 	methods := service.Methods()
 
 	l := methods.Len()
@@ -496,7 +511,7 @@ func GetService(service protoreflect.ServiceDescriptor) (*Service, error) {
 			if v, ok := a.(*dynamicpb.Message); ok {
 				data := make(map[string]any)
 				v.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-					data[toGoName(string(fd.Name()))] = getInnerOptions(v.Interface())
+					data[toGoName(string(fd.Name()))] = file.getInnerOptions("", v.Interface())
 					return true
 				})
 				out.Options[key] = data
@@ -514,7 +529,7 @@ func GetService(service protoreflect.ServiceDescriptor) (*Service, error) {
 	for i := 0; i < l; i++ {
 		methodDescriptor := methods.Get(i)
 
-		rpc, err := GetRpc(string(service.Name()), methodDescriptor)
+		rpc, err := file.GetRpc(fmt.Sprintf(".service[%d].method[%d].options", n, i), string(service.Name()), methodDescriptor)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get field %s: %w", methodDescriptor.Name(), err)
 		}
@@ -542,7 +557,7 @@ func ConcatOptions(dest map[string]any, src map[string]any) {
 }
 
 // GetRpc creates a Rpc from a method descriptor.
-func GetRpc(serviceName string, fd protoreflect.MethodDescriptor) (*Rpc, error) {
+func (file *File) GetRpc(path string, serviceName string, fd protoreflect.MethodDescriptor) (*Rpc, error) {
 	input := fd.Input().Name()
 	output := fd.Output().Name()
 
@@ -556,20 +571,16 @@ func GetRpc(serviceName string, fd protoreflect.MethodDescriptor) (*Rpc, error) 
 
 	if opts, ok := fd.Options().(*descriptorpb.MethodOptions); ok {
 		proto.RangeExtensions(opts, func(et protoreflect.ExtensionType, a any) bool {
+			fieldDescriptor := protodesc.ToFieldDescriptorProto(et.TypeDescriptor().Descriptor())
+			n1 := -1
+			if fieldDescriptor.Number != nil {
+				n1 = int(*fieldDescriptor.Number)
+			}
 			key := fmt.Sprintf("%s.%s",
 				et.TypeDescriptor().Parent().FullName().Name(),
 				et.TypeDescriptor().FullName().Name())
 			key = toGoName(key)
-			if v, ok := a.(*dynamicpb.Message); ok {
-				data := make(map[string]any)
-				v.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-					data[toGoName(string(fd.Name()))] = getInnerOptions(v.Interface())
-					return true
-				})
-				out.Options[key] = data
-				return true
-			}
-			out.Options[key] = a
+			out.Options[key] = file.getInnerOptions(fmt.Sprintf("%s.%d", path, n1), a)
 			return true
 		})
 	}
@@ -579,14 +590,32 @@ func GetRpc(serviceName string, fd protoreflect.MethodDescriptor) (*Rpc, error) 
 
 // Helper functions
 
-func getInnerOptions(v any) any {
+func (file *File) getInnerOptions(optionPath string, v any) any {
 	if v, ok := v.(*dynamicpb.Message); ok {
 		out := make(map[string]any)
 		v.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-			out[toGoName(string(fd.Name()))] = getInnerOptions(v.Interface())
+			fieldDescriptor := protodesc.ToFieldDescriptorProto(fd)
+			n := -1
+			if fieldDescriptor.Number != nil {
+				n = int(*fieldDescriptor.Number)
+			}
+			out[toGoName(string(fd.Name()))] = file.getInnerOptions(fmt.Sprintf("%s.%d", optionPath, n), v.Interface())
 			return true
 		})
 		return out
+	}
+	if value, ok := file.Comments[optionPath]; ok {
+		switch value {
+		case "@embed":
+			{
+				data, err := os.ReadFile(path.Join(file.Dir, v.(string)))
+				if err != nil {
+					panic(err)
+				}
+
+				return ByteString(StringToGoByteArray(string(data)))
+			}
+		}
 	}
 	return v
 }
@@ -879,4 +908,24 @@ func toGoName(s string) string {
 		segments[i] = string(runes)
 	}
 	return strings.Join(segments, "")
+}
+
+func StringToGoByteArray(str string) string {
+	buffer := bytes.NewBufferString("[]byte {")
+	line := bytes.NewBufferString("")
+	for i := 0; i < len(str); i++ {
+		if i != 0 && i%16 == 0 {
+			buffer.WriteString("\r\n")
+			buffer.WriteString("\t")
+			buffer.Write(line.Bytes())
+			line.Reset()
+		}
+		line.WriteString(fmt.Sprintf("0x%02x, ", str[i]))
+	}
+	buffer.WriteString("\r\n")
+	buffer.WriteString("\t")
+	buffer.Write(line.Bytes())
+	buffer.WriteString("\r\n")
+	buffer.WriteString("}")
+	return buffer.String()
 }
