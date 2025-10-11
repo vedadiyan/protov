@@ -10,6 +10,7 @@ import (
     "bytes"
     "fmt"
     "io"
+    "context"
 
     "github.com/vedadiyan/protolizer"
 )
@@ -27,9 +28,9 @@ import (
   }
 
   type {{$service.Name}}Server interface {
-    Start({{$service.Name}}Options) error
+    Start({{$service.Name}}ServiceOptions) error
     Stop() error
-    Handle({{$service.Name}}RpcOptions, func(context.Context, protolizer.Reflected)(protolizer.Reflected, error))
+    Handle(*{{$service.Name}}RpcOptions, func(context.Context, protolizer.Reflected)(protolizer.Reflected, error))
   }
 
   type {{$service.Name}}Service interface {
@@ -39,9 +40,9 @@ import (
   }        
 
   {{- range $rpc := $service.Rpcs}}
-    func Get{{$rpc.Name}}RpcOptions() *{{$service.Name}}RpcOptions {
+    func Get{{$service.Name}}{{$rpc.Name}}RpcOptions() *{{$service.Name}}RpcOptions {
       return &{{$service.Name}}RpcOptions{ 
-        Name: {{$rpc.Name}},
+        Name: "{{$rpc.Name}}",
         Options: struct { 
           {{- template "parseMap" $rpc.Options }} 
         } {
@@ -53,7 +54,7 @@ import (
 
   func Build{{$service.Name}}(server {{$service.Name}}Server, service {{$service.Name}}Service) {
       {{- range $rpc := $service.Rpcs}}
-        server.Handle(Get{{$rpc.Name}}RpcOptions(), func(ctx context.Context, in protolizer.Reflected)(protolizer.Reflected, error) {
+        server.Handle(Get{{$service.Name}}{{$rpc.Name}}RpcOptions(), func(ctx context.Context, in protolizer.Reflected)(protolizer.Reflected, error) {
           return service.{{$rpc.Name}}(ctx, in.(*{{$rpc.Input}}))
         })
       {{- end }}
@@ -62,13 +63,14 @@ import (
 {{- end }}
 {{- end }}
 
-
 {{- define "parseMap" -}}
   {{- range $key, $value := . }}
     {{- if eq (printf "%T" $value) "map[string]interface {}" }}
       {{$key}} struct {
         {{- template "parseMap" $value }}
       }
+    {{- else if eq (printf "%T" $value) "[]interface {}" }}
+      {{$key}} []{{template "parseType" (index $value 0)}}
     {{- else }}
       {{- if eq (printf "%T" $value) "compiler.ByteString" }}
          {{$key}} string
@@ -79,8 +81,17 @@ import (
   {{- end }}
 {{- end }}
 
-
-
+{{- define "parseType" -}}
+  {{- if eq (printf "%T" .) "map[string]interface {}" -}}
+    struct {
+      {{- template "parseMap" . }}
+    }
+  {{- else if eq (printf "%T" .) "compiler.ByteString" -}}
+    string
+  {{- else -}}
+    {{printf "%T" .}}
+  {{- end -}}
+{{- end }}
 
 {{- define "parseMapValues" -}}
   {{- range $key, $value := . }}
@@ -90,6 +101,10 @@ import (
         } { 
           {{- template "parseMapValues" $value }} 
         },
+    {{- else if eq (printf "%T" $value) "[]interface {}" }}
+       {{$key}}: []{{template "parseType" (index $value 0)}}{ 
+          {{- template "parseSliceValues" $value -}}
+       },
     {{- else }}
       {{- if eq (printf "%T" $value) "string" }}
         {{$key}}: "{{$value}}",
@@ -98,6 +113,24 @@ import (
       {{- else }}
         {{$key}}: {{$value}},
       {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+{{- define "parseSliceValues" -}}
+  {{- range $index, $element := . }}
+    {{- if eq (printf "%T" $element) "map[string]interface {}" }}
+      struct {
+        {{- template "parseMap" $element }}
+      }{
+        {{- template "parseMapValues" $element }}
+      },
+    {{- else if eq (printf "%T" $element) "string" }}
+      "{{$element}}",
+    {{- else if eq (printf "%T" $element) "compiler.ByteString" }}
+      string({{$element}}),
+    {{- else }}
+      {{$element}},
     {{- end }}
   {{- end }}
 {{- end }}

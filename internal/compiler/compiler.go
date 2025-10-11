@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"os"
 	"path"
@@ -539,6 +540,9 @@ func (file *File) GetService(n int, service protoreflect.ServiceDescriptor) (*Se
 	out.RpcOptions = make(map[string]any)
 	for _, rpc := range out.Rpcs {
 		ConcatOptions(out.RpcOptions, rpc.Options)
+		tmpMap := make(map[string]any)
+		ConcatOptionValues(tmpMap, rpc.Options)
+		rpc.Options = tmpMap
 	}
 
 	return out, nil
@@ -552,7 +556,50 @@ func ConcatOptions(dest map[string]any, src map[string]any) {
 			ConcatOptions(v, value)
 			continue
 		}
+		if value, ok := value.([]any); ok {
+			v := make(map[string]any)
+			dest[key] = []any{v}
+			for _, val := range value {
+				if value, ok := val.(map[string]any); ok {
+					ConcatOptions(v, value)
+					continue
+				}
+			}
+			continue
+		}
 		dest[key] = fmt.Sprintf("%T", value)
+	}
+}
+
+func ConcatOptionValues(dest map[string]any, src map[string]any) {
+	for key, value := range src {
+		if value, ok := value.(map[string]any); ok {
+			v := make(map[string]any)
+			dest[key] = v
+			ConcatOptionValues(v, value)
+			continue
+		}
+		if value, ok := value.([]any); ok {
+			allKeys := make(map[string]any)
+			for _, val := range value {
+				if value, ok := val.(map[string]any); ok {
+					v := make(map[string]any)
+					ConcatOptionValues(v, value)
+					maps.Copy(allKeys, v)
+					continue
+				}
+			}
+			for _, val := range value {
+				if value, ok := val.(map[string]any); ok {
+					for k, val := range allKeys {
+						if _, ok := value[k]; !ok {
+							value[k] = reflect.Zero(reflect.TypeOf(val)).Interface()
+						}
+					}
+				}
+			}
+		}
+		dest[key] = value
 	}
 }
 
@@ -602,6 +649,13 @@ func (file *File) getInnerOptions(optionPath string, v any) any {
 			out[toGoName(string(fd.Name()))] = file.getInnerOptions(fmt.Sprintf("%s.%d", optionPath, n), v.Interface())
 			return true
 		})
+		return out
+	}
+	if list, ok := v.(protoreflect.List); ok {
+		out := make([]any, list.Len())
+		for i := 0; i < list.Len(); i++ {
+			out[i] = file.getInnerOptions(fmt.Sprintf("%s.%d", optionPath, i), list.Get(i).Interface())
+		}
 		return out
 	}
 	if value, ok := file.Comments[optionPath]; ok {
