@@ -227,12 +227,11 @@ func GetFile(dir string, filePath string, file linker.File) (*File, error) {
 	if opts, ok := file.Options().(*descriptorpb.FileOptions); ok {
 		out.FilePath = opts.GetGoPackage()
 		_, out.PackageName = path.Split(out.FilePath)
-
 		proto.RangeExtensions(opts, func(et protoreflect.ExtensionType, a any) bool {
 			key := fmt.Sprintf("%s.%s",
 				et.TypeDescriptor().Parent().FullName().Name(),
 				et.TypeDescriptor().FullName().Name())
-			out.Options[key] = a
+			out.Options[key] = out.getInnerOptions("", a)
 			return true
 		})
 	}
@@ -325,16 +324,7 @@ func (file *File) GetMessage(message protoreflect.MessageDescriptor) (*Message, 
 				et.TypeDescriptor().Parent().FullName().Name(),
 				et.TypeDescriptor().FullName().Name())
 			key = toGoName(key)
-			if v, ok := a.(*dynamicpb.Message); ok {
-				data := make(map[string]any)
-				v.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-					data[toGoName(string(fd.Name()))] = file.getInnerOptions("", v.Interface())
-					return true
-				})
-				out.Options[key] = data
-				return true
-			}
-			out.Options[key] = a
+			out.Options[key] = file.getInnerOptions("", a)
 			return true
 		})
 	}
@@ -444,7 +434,7 @@ func (file *File) getEnum(enum protoreflect.EnumDescriptor) (*Enum, error) {
 			key := fmt.Sprintf("%s.%s",
 				et.TypeDescriptor().Parent().FullName().Name(),
 				et.TypeDescriptor().FullName().Name())
-			out.Options[key] = a
+			out.Options[key] = file.getInnerOptions("", a)
 			return true
 		})
 	}
