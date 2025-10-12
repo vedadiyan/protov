@@ -134,11 +134,12 @@ type Message struct {
 
 // Message represents a protocol buffer service.
 type Service struct {
-	Name       string
-	Options    map[string]any
-	Descriptor string
-	Rpcs       []*Rpc
-	RpcOptions map[string]any
+	Name           string
+	Options        map[string]any
+	Descriptor     string
+	Rpcs           []*Rpc
+	RpcOptions     map[string]any
+	CodeGeneration []string
 }
 
 // Message represents a protocol buffer rpc.
@@ -495,12 +496,26 @@ func (file *File) GetServices(md protoreflect.ServiceDescriptors) ([]*Service, e
 func (file *File) GetService(n int, service protoreflect.ServiceDescriptor) (*Service, error) {
 	methods := service.Methods()
 
+	sourceLocation := service.ParentFile().SourceLocations().ByDescriptor(service)
+
+	comments := make([]string, 0)
+	for _, comment := range sourceLocation.LeadingDetachedComments {
+		value := strings.TrimRight(comment, "\r\n")
+		value = strings.TrimRight(value, " ")
+		value = strings.TrimLeft(value, " ")
+		values := strings.Split(value, " ")
+		if len(values) == 2 && values[0] == "@generate" {
+			comments = append(comments, values[1])
+		}
+	}
+
 	l := methods.Len()
 
 	out := &Service{
-		Name:    string(service.Name()),
-		Rpcs:    make([]*Rpc, 0, l),
-		Options: make(map[string]any),
+		Name:           string(service.Name()),
+		Rpcs:           make([]*Rpc, 0, l),
+		Options:        make(map[string]any),
+		CodeGeneration: comments,
 	}
 
 	if opts, ok := service.Options().(*descriptorpb.ServiceOptions); ok {
