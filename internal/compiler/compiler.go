@@ -120,6 +120,7 @@ type Enum struct {
 	Name    string
 	Values  []*EnumValue
 	Options map[string]any
+	File    *File
 }
 
 // Message represents a protocol buffer message.
@@ -130,6 +131,7 @@ type Message struct {
 	Options    map[string]any
 	Descriptor string
 	TypeName   string
+	File       *File
 }
 
 // Message represents a protocol buffer service.
@@ -140,6 +142,7 @@ type Service struct {
 	Rpcs           []*Rpc
 	RpcOptions     map[string]any
 	CodeGeneration []string
+	File           *File
 }
 
 // Message represents a protocol buffer rpc.
@@ -316,6 +319,7 @@ func (file *File) GetMessage(message protoreflect.MessageDescriptor) (*Message, 
 		TypeName:   string(fullName),
 		Fields:     make([]*Field, 0, l),
 		Ignorables: NewIgnorables(),
+		File:       file,
 	}
 
 	if opts, ok := message.Options().(*descriptorpb.MessageOptions); ok {
@@ -427,6 +431,7 @@ func (file *File) getEnum(enum protoreflect.EnumDescriptor) (*Enum, error) {
 	out := &Enum{
 		Name:   string(name),
 		Values: make([]*EnumValue, 0, l),
+		File:   file,
 	}
 
 	if opts, ok := enum.Options().(*descriptorpb.EnumOptions); ok {
@@ -506,6 +511,7 @@ func (file *File) GetService(n int, service protoreflect.ServiceDescriptor) (*Se
 		Rpcs:           make([]*Rpc, 0, l),
 		Options:        make(map[string]any),
 		CodeGeneration: comments,
+		File:           file,
 	}
 
 	if opts, ok := service.Options().(*descriptorpb.ServiceOptions); ok {
