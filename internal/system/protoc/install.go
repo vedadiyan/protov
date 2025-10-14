@@ -18,7 +18,7 @@ func protoPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	protocDir := filepath.Join(homeDir, "protoc")
+	protocDir := filepath.Join(homeDir, "protoc2")
 	if err := os.MkdirAll(protocDir, 0755); err != nil {
 		return "", err
 	}
@@ -109,8 +109,8 @@ func combineOSandArch(os common.OS, arch common.ARCH) (string, error) {
 	return "", fmt.Errorf("%s-%s is not supported", os, arch)
 }
 
-func Install(progressChannel chan<- int) error {
-	repos, err := common.LatestTag("", "")
+func Install(feedback func(string)) error {
+	repos, err := common.LatestTag("protocolbuffers", "protobuf")
 	if err != nil {
 		return err
 	}
@@ -131,24 +131,29 @@ func Install(progressChannel chan<- int) error {
 		if err != nil && err != io.EOF {
 			return err
 		}
-		if progressChannel != nil {
-			progressChannel <- int((float64(buffer.Len()) / float64(l) * 100))
-		}
+		provideFeedback(feedback, fmt.Sprintf("\rDownloading Dependencies: %d%%", int((float64(buffer.Len())/float64(l)*100))))
 		if wl < bufferSize {
 			break
 		}
 	}
-
+	provideFeedback(feedback, "\r\nSetting Environment Variables...")
 	protoPath, err := protoPath()
 	if err != nil {
 		return err
 	}
 
-	if err := exportEnv(protoPath); err != nil {
-		return err
-	}
+	// if err := exportEnv(protoPath); err != nil {
+	// 	return err
+	// }
+	provideFeedback(feedback, "\r\nDecompressing Archives...")
 	if err := common.UnZipDump(protoPath, bytes.NewReader(buffer.Bytes()), l); err != nil {
 		return err
 	}
 	return nil
+}
+
+func provideFeedback(fn func(string), str string) {
+	if fn != nil {
+		fn(str)
+	}
 }

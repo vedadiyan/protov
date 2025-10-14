@@ -2,9 +2,11 @@ package common
 
 import (
 	"archive/zip"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func UnZipDump(path string, r io.ReaderAt, l int64) error {
@@ -15,6 +17,9 @@ func UnZipDump(path string, r io.ReaderAt, l int64) error {
 
 	for _, file := range reader.File {
 		destPath := filepath.Join(path, file.Name)
+		if !strings.HasPrefix(destPath, fmt.Sprintf("%s\\include", path)) {
+			continue
+		}
 		if file.FileInfo().IsDir() {
 			os.MkdirAll(destPath, file.FileInfo().Mode())
 			continue

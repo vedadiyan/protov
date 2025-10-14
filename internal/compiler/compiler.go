@@ -82,7 +82,7 @@ func (r *Resolver) accessor(f string) (io.ReadCloser, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		// Fallback to standard protoc include directory
-		home := "C:\\protoc\\include"
+		home := os.Getenv("PROTOV_HOME")
 		fallbackPath := path.Join(home, cleanPath)
 		data, err = os.ReadFile(fallbackPath)
 		if err != nil {
