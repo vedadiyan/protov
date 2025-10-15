@@ -3,6 +3,7 @@ package compiler
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"text/template"
 	"unicode"
 
 	"github.com/bufbuild/protocompile"
@@ -24,6 +26,31 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
+)
+
+var (
+	//go:embed templates/decode.go.tmpl
+	_decodeTemplate string
+	//go:embed templates/decodemap.go.tmpl
+	_decodeMapTemplate string
+	//go:embed templates/decoderepeated.go.tmpl
+	_decodeRepeatedTemplate string
+	//go:embed templates/encode.go.tmpl
+	_encodeTemplate string
+	//go:embed templates/encodemap.go.tmpl
+	_encodeMapTemplate string
+	//go:embed templates/encoderepeated.go.tmpl
+	_encodeRepeatedTemplate string
+	//go:embed templates/enum.go.tmpl
+	_enumTemplate string
+	//go:embed templates/iszero.go.tmpl
+	_isZeroTemplate string
+	//go:embed templates/main.go.tmpl
+	_mainTemplate string
+	//go:embed templates/message.go.tmpl
+	_messageTemplate string
+	//go:embed templates/service.go.tmpl
+	_serviceTemplate string
 )
 
 // Format is the serialization format used to represent the default value.
@@ -166,6 +193,7 @@ type File struct {
 	Services    []*Service
 	Enums       []*Enum
 	Comments    map[string]string
+	FileName    string
 }
 
 // AST represents the complete abstract syntax tree of compiled files.
@@ -173,8 +201,32 @@ type AST struct {
 	Files []*File
 }
 
-// Compile compiles a protocol buffer file and returns its AST.
-func Compile(file string) (*AST, error) {
+func Compile(file *File) ([]byte, error) {
+	templates, err := template.ParseFiles(
+		_decodeTemplate,
+		_decodeMapTemplate,
+		_decodeRepeatedTemplate,
+		_encodeTemplate,
+		_encodeMapTemplate,
+		_encodeRepeatedTemplate,
+		_enumTemplate,
+		_isZeroTemplate,
+		_mainTemplate,
+		_messageTemplate,
+		_serviceTemplate,
+	)
+	if err != nil {
+		return nil, err
+	}
+	out := bytes.NewBuffer([]byte{})
+	if err := templates.ExecuteTemplate(out, "Main", file); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+// Parse compiles a protocol buffer file and returns its AST.
+func Parse(file string) (*AST, error) {
 	normalizedFile := strings.ReplaceAll(file, "\\", "/")
 	dir := path.Dir(normalizedFile) + "/"
 
@@ -211,7 +263,8 @@ func Compile(file string) (*AST, error) {
 // GetFile extracts file information from a linked file.
 func GetFile(dir string, filePath string, file linker.File) (*File, error) {
 	out := &File{
-		Options: make(map[string]any),
+		Options:  make(map[string]any),
+		FileName: string(file.Name()),
 	}
 	out.Dir = dir
 	_, out.Source = path.Split(filePath)

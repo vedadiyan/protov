@@ -9,7 +9,7 @@ import (
 )
 
 func TestCompile(t *testing.T) {
-	res, err := Compile("C:\\Users\\Pouya\\Desktop\\New folder\\users\\service.proto")
+	res, err := Parse("C:\\Users\\Pouya\\Desktop\\New folder\\users\\service.proto")
 	if err != nil {
 		t.FailNow()
 	}
