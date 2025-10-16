@@ -269,11 +269,11 @@ func Parse(file string) (*AST, error) {
 // GetFile extracts file information from a linked file.
 func GetFile(dir string, filePath string, file linker.File) (*File, error) {
 	out := &File{
-		Options:  make(map[string]any),
-		FileName: string(file.Name()),
+		Options: make(map[string]any),
 	}
 	out.Dir = dir
 	_, out.Source = path.Split(filePath)
+	out.FileName = strings.ReplaceAll(strings.ToLower(out.Source), ".proto", "")
 	out.Comments = make(map[string]string)
 	protodesc := protodesc.ToFileDescriptorProto(file)
 	for _, i := range protodesc.SourceCodeInfo.Location {

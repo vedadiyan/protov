@@ -7,7 +7,7 @@ import (
 	"go/token"
 	"os"
 	"os/exec"
-	"path"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"text/template"
@@ -120,7 +120,7 @@ func (x *ModuleBuild) Run() error {
 				return err
 			}
 		}
-		for _, r := range i.Dependencies {
+		for _, r := range i.Replacements {
 			segments := strings.Split(r, "=>")
 			if len(segments) != 2 {
 				return fmt.Errorf("bad replace format")
@@ -146,7 +146,7 @@ func (x *ModuleBuild) Run() error {
 			return err
 		}
 
-		if err := os.WriteFile(path.Join(i.Destination, "go.mod"), modBytes, os.ModePerm); err != nil {
+		if err := os.WriteFile(filepath.Join(i.Destination, "go.mod"), modBytes, os.ModePerm); err != nil {
 			return err
 		}
 
@@ -162,11 +162,11 @@ func (x *ModuleBuild) Run() error {
 				if err != nil {
 					return err
 				}
-				dir := path.Join(i.Destination, "autogen", f.PackageName, f.FilePath)
+				dir := filepath.Join(i.Destination, f.FilePath)
 				if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 					return err
 				}
-				path := path.Join(dir, fmt.Sprintf("%s.pb.go", f.FileName))
+				path := filepath.Join(dir, fmt.Sprintf("%s.pb.go", f.FileName))
 				if err := os.WriteFile(path, compiled, os.ModePerm); err != nil {
 					return err
 				}
@@ -185,12 +185,12 @@ func (x *ModuleBuild) Run() error {
 			if err := template.Execute(out, files); err != nil {
 				return err
 			}
-			fileName := strings.ReplaceAll(x, path.Ext(x), "")
-			dir := path.Join(i.Destination, "cmd")
+			_, fileName := filepath.Split(strings.ReplaceAll(x, filepath.Ext(x), ""))
+			dir := filepath.Join(i.Destination, "cmd")
 			if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 				return err
 			}
-			path := path.Join(dir, fileName)
+			path := filepath.Join(dir, fileName)
 			if err := os.WriteFile(path, out.Bytes(), os.ModePerm); err != nil {
 				return err
 			}
@@ -198,15 +198,32 @@ func (x *ModuleBuild) Run() error {
 		if !x.Source {
 			tmp := os.TempDir()
 			id := uuid.New().String()
-			cmd := exec.Command("go", "build", "-o", path.Join(tmp, id), "./cmd/")
+			cmd := exec.Command("go", "build", "-o", filepath.Join(tmp, id), "./cmd/")
 			cmd.Dir = i.Destination
 			if err := cmd.Run(); err != nil {
 				return err
 			}
-			if err := os.RemoveAll(path.Join(i.Destination, "/")); err != nil {
+			dir, err := os.ReadDir(i.Destination)
+			if err != nil {
 				return err
 			}
-			if err := os.Rename(path.Join(tmp, id), path.Join(i.Destination, "app")); err != nil {
+			for _, x := range dir {
+				if err := os.RemoveAll(filepath.Join(i.Destination, x.Name())); err != nil {
+					return err
+				}
+			}
+			ext := ""
+			switch i.Environment["GOOS"] {
+			case "windows":
+				{
+					ext = ".exe"
+				}
+			case "darwin":
+				{
+					ext = ".dmg"
+				}
+			}
+			if err := os.Rename(filepath.Join(tmp, id), filepath.Join(i.Destination, fmt.Sprintf("app%s", ext))); err != nil {
 				return err
 			}
 		}
@@ -228,12 +245,12 @@ func GetDependency(dep string) ([2]string, error) {
 }
 
 func ReadFile(file string) ([]byte, error) {
-	if path.IsAbs(file) {
+	if filepath.IsAbs(filepath.Clean(file)) {
 		return os.ReadFile(file)
 	}
 
 	basePath := os.Getenv("PROTOV_HOME")
-	return os.ReadFile(path.Join(basePath, "templates", file))
+	return os.ReadFile(filepath.Join(basePath, "templates", file))
 }
 
 func ParsePath(code []byte) (string, error) {

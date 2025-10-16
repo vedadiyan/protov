@@ -1,0 +1,17 @@
+modules:
+    - name: app
+      destination: "C:\\Users\\Pouya\\Desktop\\New folder\\XXXXZZZZZ"
+      mod: org/com/app
+      go: 1.25.1
+      protos:
+        - "C:\\Users\\Pouya\\Desktop\\New folder\\users\\service.proto"
+      dependencies:
+        - github.com/vedadiyan/protolizer
+      replacements: []
+      mainTemplate:
+        - "C:\\Users\\Pouya\\Desktop\\New folder\\users\\main.go.tmpl"
+      buildFlags: []
+      environment:
+        GOARCH: amd64
+        GOOS: windows
+      tests: []
