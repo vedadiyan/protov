@@ -170,6 +170,27 @@ func (x *ModuleBuild) Run() error {
 				if err := os.WriteFile(path, compiled, os.ModePerm); err != nil {
 					return err
 				}
+				for _, srv := range f.Services {
+					for _, cg := range srv.CodeGeneration {
+						data, err := ReadFile(cg)
+						if err != nil {
+							return err
+						}
+						template, err := template.New("temp").Parse(string(data))
+						if err != nil {
+							return err
+						}
+						out := bytes.NewBuffer([]byte{})
+						if err := template.Execute(out, files); err != nil {
+							return err
+						}
+						_, fileName := filepath.Split(strings.ReplaceAll(cg, filepath.Ext(x), ""))
+						path := filepath.Join(dir, fileName)
+						if err := os.WriteFile(path, out.Bytes(), os.ModePerm); err != nil {
+							return err
+						}
+					}
+				}
 			}
 		}
 		for _, x := range i.MainTemplate {
