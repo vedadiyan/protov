@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	github.com/bufbuild/protocompile v0.14.1
-	github.com/rogpeppe/go-internal v1.14.1
+	github.com/google/uuid v1.6.0
 	github.com/vedadiyan/flaggy v0.0.0-20221219094954-d106d0dc1b71
 	go.lsp.dev/protocol v0.12.0
 	go.yaml.in/yaml/v3 v3.0.4

@@ -202,7 +202,7 @@ type AST struct {
 }
 
 func Compile(file *File) ([]byte, error) {
-	templates, err := template.ParseFiles(
+	allTemplates := []string{
 		_decodeTemplate,
 		_decodeMapTemplate,
 		_decodeRepeatedTemplate,
@@ -214,9 +214,15 @@ func Compile(file *File) ([]byte, error) {
 		_mainTemplate,
 		_messageTemplate,
 		_serviceTemplate,
-	)
-	if err != nil {
-		return nil, err
+	}
+	templates := template.New("test")
+
+	for _, t := range allTemplates {
+		template, err := templates.Parse(t)
+		if err != nil {
+			return nil, err
+		}
+		templates = template
 	}
 	out := bytes.NewBuffer([]byte{})
 	if err := templates.ExecuteTemplate(out, "Main", file); err != nil {

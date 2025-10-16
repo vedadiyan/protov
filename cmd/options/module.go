@@ -3,12 +3,16 @@ package options
 import (
 	"bytes"
 	"fmt"
+	"go/parser"
+	"go/token"
 	"os"
+	"os/exec"
 	"path"
 	"runtime"
 	"strings"
 	"text/template"
 
+	"github.com/google/uuid"
 	"github.com/vedadiyan/protov/internal/compiler"
 	"go.yaml.in/yaml/v3"
 	"golang.org/x/mod/modfile"
@@ -21,17 +25,17 @@ type Config struct {
 }
 
 type ModuleConfig struct {
-	Name          string            `yaml:"name"`
-	Destination   string            `yaml:"destination"`
-	Mod           string            `yaml:"mod"`
-	GoVersion     string            `yaml:"go"`
-	ProtoFiles    []string          `yaml:"protos"`
-	Dependencies  []string          `yaml:"dependencies"`
-	Replacements  []string          `yaml:"replacements"`
-	TemplateFiles []string          `yaml:"templateFiles"`
-	BuildFlags    []string          `yaml:"buildFlags"`
-	Environment   map[string]string `yaml:"environment"`
-	Tests         []string          `yaml:"tests"`
+	Name         string            `yaml:"name"`
+	Destination  string            `yaml:"destination"`
+	Mod          string            `yaml:"mod"`
+	GoVersion    string            `yaml:"go"`
+	ProtoFiles   []string          `yaml:"protos"`
+	Dependencies []string          `yaml:"dependencies"`
+	Replacements []string          `yaml:"replacements"`
+	MainTemplate []string          `yaml:"mainTemplate"`
+	BuildFlags   []string          `yaml:"buildFlags"`
+	Environment  map[string]string `yaml:"environment"`
+	Tests        []string          `yaml:"tests"`
 }
 
 type ModuleInit struct{}
@@ -66,10 +70,7 @@ func (x *ModuleInit) Run() error {
 		Name:        "app",
 		Destination: "/out/app",
 		Mod:         "org/com/app",
-		GoVersion:   runtime.Version(),
-		ProtoFiles: []string{
-			"",
-		},
+		GoVersion:   strings.ReplaceAll(runtime.Version(), "go", ""),
 		Dependencies: []string{
 			"github.com/vedadiyan/protolizer",
 		},
@@ -161,20 +162,51 @@ func (x *ModuleBuild) Run() error {
 				if err != nil {
 					return err
 				}
-				path := path.Join(i.Destination, f.FilePath, fmt.Sprintf("%s.pb.go", f.FileName))
+				dir := path.Join(i.Destination, "autogen", f.PackageName, f.FilePath)
+				if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+					return err
+				}
+				path := path.Join(dir, fmt.Sprintf("%s.pb.go", f.FileName))
 				if err := os.WriteFile(path, compiled, os.ModePerm); err != nil {
 					return err
 				}
 			}
 		}
-		for _, x := range i.TemplateFiles {
-			_ = x
-			template, err := template.New("").Parse("")
+		for _, x := range i.MainTemplate {
+			data, err := ReadFile(x)
+			if err != nil {
+				return err
+			}
+			template, err := template.New("temp").Parse(string(data))
 			if err != nil {
 				return err
 			}
 			out := bytes.NewBuffer([]byte{})
 			if err := template.Execute(out, files); err != nil {
+				return err
+			}
+			fileName := strings.ReplaceAll(x, path.Ext(x), "")
+			dir := path.Join(i.Destination, "cmd")
+			if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+				return err
+			}
+			path := path.Join(dir, fileName)
+			if err := os.WriteFile(path, out.Bytes(), os.ModePerm); err != nil {
+				return err
+			}
+		}
+		if !x.Source {
+			tmp := os.TempDir()
+			id := uuid.New().String()
+			cmd := exec.Command("go", "build", "-o", path.Join(tmp, id), "./cmd/")
+			cmd.Dir = i.Destination
+			if err := cmd.Run(); err != nil {
+				return err
+			}
+			if err := os.RemoveAll(path.Join(i.Destination, "/")); err != nil {
+				return err
+			}
+			if err := os.Rename(path.Join(tmp, id), path.Join(i.Destination, "app")); err != nil {
 				return err
 			}
 		}
@@ -193,4 +225,22 @@ func GetDependency(dep string) ([2]string, error) {
 		version = segments[1]
 	}
 	return [2]string{path, version}, nil
+}
+
+func ReadFile(file string) ([]byte, error) {
+	if path.IsAbs(file) {
+		return os.ReadFile(file)
+	}
+
+	basePath := os.Getenv("PROTOV_HOME")
+	return os.ReadFile(path.Join(basePath, "templates", file))
+}
+
+func ParsePath(code []byte) (string, error) {
+	fileSet := token.NewFileSet()
+	expr, err := parser.ParseFile(fileSet, "test.go", code, parser.ParseComments)
+	if err != nil {
+		return "", err
+	}
+	return expr.Name.Name, nil
 }
