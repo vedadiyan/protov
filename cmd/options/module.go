@@ -20,6 +20,14 @@ import (
 
 const FILENAME = "mod.yml"
 
+const DOCKERFILE = `
+FROM alpine:latest
+COPY . /srv
+RUN chmod 777 /srv/app
+WORKDIR /srv
+CMD ./app
+`
+
 type Config struct {
 	Modules []ModuleConfig `yaml:"modules"`
 }
@@ -46,8 +54,9 @@ type ModuleBuild struct {
 }
 
 type ModuleDockerize struct {
-	Tag  string `long:"--tag" help:"image tag name"`
-	Help bool   `long:"help" help:"shows help"`
+	Tag     string  `long:"--tag" help:"image tag name"`
+	Builder *string `long:"--builder" help:"specifies which tool to use to build the image"`
+	Help    bool    `long:"help" help:"shows help"`
 }
 
 type Module struct {
@@ -103,6 +112,48 @@ func (x *ModuleBuild) Run() error {
 		return err
 	}
 
+	return Build(conf, x.Source)
+}
+
+func (x *ModuleDockerize) Run() error {
+	data, err := os.ReadFile(FILENAME)
+	if err != nil || os.IsNotExist(err) {
+		return err
+	}
+
+	conf := new(Config)
+
+	if err := yaml.Unmarshal(data, &conf); err != nil {
+		return err
+	}
+
+	if err := Build(conf, false); err != nil {
+		return err
+	}
+
+	builder := "docker"
+
+	if x.Builder != nil {
+		builder = *x.Builder
+	}
+
+	for _, i := range conf.Modules {
+		if err := os.WriteFile(filepath.Join(i.Destination, "DOCKERFILE"), []byte(DOCKERFILE), os.ModePerm); err != nil {
+			return err
+		}
+		cmd := exec.Command(builder, "build", "-t", x.Tag, ".")
+		cmd.Dir = i.Destination
+		if err := cmd.Run(); err != nil {
+			return err
+		}
+		if err := os.RemoveAll(i.Destination); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func Build(conf *Config, source bool) error {
 	for _, i := range conf.Modules {
 		mod := new(modfile.File)
 		if err := mod.AddModuleStmt(i.Mod); err != nil {
@@ -216,7 +267,7 @@ func (x *ModuleBuild) Run() error {
 				return err
 			}
 		}
-		if !x.Source {
+		if !source {
 			tmp := os.TempDir()
 			id := uuid.New().String()
 			cmd := exec.Command("go", "build", "-o", filepath.Join(tmp, id), "./cmd/")
