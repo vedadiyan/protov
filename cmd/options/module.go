@@ -54,9 +54,11 @@ type ModuleBuild struct {
 }
 
 type ModuleDockerize struct {
-	Tag     string  `long:"--tag" help:"image tag name"`
-	Builder *string `long:"--builder" help:"specifies which tool to use to build the image"`
-	Help    bool    `long:"help" help:"shows help"`
+	Tag      string  `long:"--tag" help:"image tag name"`
+	Builder  *string `long:"--builder" help:"specifies which tool to use to build the image"`
+	Platform *string `long:"--platform" help:"specifies the platform for which the image must be built"`
+	Buildx   bool    `long:"--buildx" help:"used buildx to build the image"`
+	Help     bool    `long:"help" help:"shows help"`
 }
 
 type Module struct {
@@ -136,12 +138,23 @@ func (x *ModuleDockerize) Run() error {
 	if x.Builder != nil {
 		builder = *x.Builder
 	}
+	buildx := ""
+	tail := ""
+	if x.Buildx {
+		buildx = "buildx"
+		tail = "--output type=docker"
+	}
+	platform := ""
+	if x.Platform != nil {
+		platform = "--platform=" + *x.Platform
+	}
 
 	for _, i := range conf.Modules {
 		if err := os.WriteFile(filepath.Join(i.Destination, "DOCKERFILE"), []byte(DOCKERFILE), os.ModePerm); err != nil {
 			return err
 		}
-		cmd := exec.Command(builder, "build", "-t", x.Tag, ".")
+
+		cmd := exec.Command(builder, "build", buildx, platform, platform, "-t", x.Tag, ".", tail)
 		cmd.Dir = i.Destination
 		if err := cmd.Run(); err != nil {
 			return err
