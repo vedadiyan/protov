@@ -245,10 +245,10 @@ func Build(conf *Config, source bool) error {
 							return err
 						}
 						out := bytes.NewBuffer([]byte{})
-						if err := template.Execute(out, files); err != nil {
+						if err := template.Execute(out, ast); err != nil {
 							return err
 						}
-						_, fileName := filepath.Split(strings.ReplaceAll(cg, filepath.Ext(x), ""))
+						_, fileName := filepath.Split(strings.ReplaceAll(cg, filepath.Ext(cg), ""))
 						path := filepath.Join(dir, fileName)
 						if err := os.WriteFile(path, out.Bytes(), os.ModePerm); err != nil {
 							return err
