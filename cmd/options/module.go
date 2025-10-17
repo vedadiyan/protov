@@ -13,6 +13,7 @@ import (
 	"text/template"
 
 	"github.com/google/uuid"
+	flaggy "github.com/vedadiyan/flaggy/pkg"
 	"github.com/vedadiyan/protov/internal/compiler"
 	"go.yaml.in/yaml/v3"
 	"golang.org/x/mod/modfile"
@@ -118,6 +119,12 @@ func (x *ModuleBuild) Run() error {
 }
 
 func (x *ModuleDockerize) Run() error {
+
+	if len(x.Tag) == 0 {
+		flaggy.PrintHelp()
+		return fmt.Errorf("tag is required")
+	}
+
 	data, err := os.ReadFile(FILENAME)
 	if err != nil || os.IsNotExist(err) {
 		return err

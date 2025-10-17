@@ -12,5 +12,4 @@ func main() {
 	if err := flaggy.Parse(args, os.Args[1:]); err != nil {
 		fmt.Println(err)
 	}
-
 }

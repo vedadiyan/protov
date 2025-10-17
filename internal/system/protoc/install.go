@@ -2,7 +2,6 @@ package protoc
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,7 +12,7 @@ import (
 	"github.com/vedadiyan/protov/internal/system/common"
 )
 
-func protoPath() (string, error) {
+func ProtoPath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
@@ -27,12 +26,11 @@ func protoPath() (string, error) {
 }
 
 func exportEnv(protoPath string) error {
-	binPath := filepath.Join(protoPath, "bin")
 	currentPath := os.Getenv("PATH")
 	if common.GetOS() == common.OS_WINDOWS {
-		cmd := exec.Command("setx", "PATH", fmt.Sprintf("%s;%s", currentPath, binPath)).Run()
-		if cmd.Error() != "" {
-			return errors.New(cmd.Error())
+		err := exec.Command("setx", "PATH", fmt.Sprintf("%s;%s", currentPath, protoPath)).Run()
+		if err != nil {
+			return err
 		}
 		return nil
 	}
@@ -45,7 +43,7 @@ func exportEnv(protoPath string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(file, "\nexport PATH=$PATH:%s\n", binPath); err != nil {
+	if _, err := fmt.Fprintf(file, "\nexport PATH=$PATH:%s\n", protoPath); err != nil {
 		return err
 	}
 	if err := file.Close(); err != nil {
@@ -137,14 +135,22 @@ func Install(feedback func(string)) error {
 		}
 	}
 	provideFeedback(feedback, "\r\nSetting Environment Variables...")
-	protoPath, err := protoPath()
+	protoPath, err := ProtoPath()
 	if err != nil {
 		return err
 	}
 
-	// if err := exportEnv(protoPath); err != nil {
-	// 	return err
-	// }
+	protovFile, err := os.ReadFile(os.Args[0])
+	if err != nil {
+		return err
+	}
+	_, fileName := filepath.Split(os.Args[0])
+	if err := os.WriteFile(filepath.Join(protoPath, fileName), protovFile, os.ModePerm); err != nil {
+		return err
+	}
+	if err := exportEnv(protoPath); err != nil {
+		return err
+	}
 	provideFeedback(feedback, "\r\nDecompressing Archives...")
 	if err := common.UnZipDump(protoPath, bytes.NewReader(buffer.Bytes()), l); err != nil {
 		return err

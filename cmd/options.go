@@ -1,6 +1,7 @@
 package main
 
 import (
+	flaggy "github.com/vedadiyan/flaggy/pkg"
 	"github.com/vedadiyan/protov/cmd/options"
 )
 
@@ -13,3 +14,8 @@ type (
 		Help    bool            `long:"help" help:"shows help"`
 	}
 )
+
+func (x *Options) Run() error {
+	flaggy.PrintHelp()
+	return nil
+}

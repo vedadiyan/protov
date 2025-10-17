@@ -20,6 +20,7 @@ import (
 	"github.com/bufbuild/protocompile"
 	"github.com/bufbuild/protocompile/linker"
 	"github.com/bufbuild/protocompile/protoutil"
+	"github.com/vedadiyan/protov/internal/system/protoc"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
@@ -109,8 +110,11 @@ func (r *Resolver) accessor(f string) (io.ReadCloser, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		// Fallback to standard protoc include directory
-		home := os.Getenv("PROTOV_HOME")
-		fallbackPath := path.Join(home, cleanPath)
+		protoPath, err := protoc.ProtoPath()
+		if err != nil {
+			return nil, err
+		}
+		fallbackPath := path.Join(protoPath, "include", cleanPath)
 		data, err = os.ReadFile(fallbackPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read %s from %s or %s: %w", f, filePath, fallbackPath, err)
