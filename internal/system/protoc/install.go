@@ -155,6 +155,10 @@ func Install(feedback func(string)) error {
 	if err := common.UnZipDump(protoPath, bytes.NewReader(buffer.Bytes()), l); err != nil {
 		return err
 	}
+	cmd := exec.Command("go", "install", "golang.org/x/tools/cmd/goimports@latest")
+	if err := cmd.Run(); err != nil {
+		return err
+	}
 	return nil
 }
 

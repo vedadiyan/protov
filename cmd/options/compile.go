@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -49,8 +50,19 @@ func (x *Compile) Run() error {
 			if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 				return err
 			}
-			path := filepath.Join(dir, fmt.Sprintf("%s.pb.go", file.FileName))
+			fileName := fmt.Sprintf("%s.pb.go", file.FileName)
+			path := filepath.Join(dir, fileName)
 			if err := os.WriteFile(path, compiled, os.ModePerm); err != nil {
+				return err
+			}
+			cmd := exec.Command("gofmt", "-w", fileName)
+			cmd.Dir = dir
+			if err := cmd.Run(); err != nil {
+				return err
+			}
+			cmd = exec.Command("goimports", "-w", fileName)
+			cmd.Dir = dir
+			if err := cmd.Run(); err != nil {
 				return err
 			}
 			for _, srv := range file.Services {
@@ -70,6 +82,16 @@ func (x *Compile) Run() error {
 					_, fileName := filepath.Split(strings.ReplaceAll(cg, filepath.Ext(cg), ""))
 					path := filepath.Join(dir, fileName)
 					if err := os.WriteFile(path, out.Bytes(), os.ModePerm); err != nil {
+						return err
+					}
+					cmd := exec.Command("gofmt", "-w", fileName)
+					cmd.Dir = dir
+					if err := cmd.Run(); err != nil {
+						return err
+					}
+					cmd = exec.Command("goimports", "-w", fileName)
+					cmd.Dir = dir
+					if err := cmd.Run(); err != nil {
 						return err
 					}
 				}

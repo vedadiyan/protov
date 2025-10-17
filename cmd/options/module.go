@@ -237,10 +237,22 @@ func Build(conf *Config, source bool) error {
 				if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 					return err
 				}
-				path := filepath.Join(dir, fmt.Sprintf("%s.pb.go", f.FileName))
+				fileName := fmt.Sprintf("%s.pb.go", f.FileName)
+				path := filepath.Join(dir, fileName)
 				if err := os.WriteFile(path, compiled, os.ModePerm); err != nil {
 					return err
 				}
+				cmd := exec.Command("gofmt", "-w", fileName)
+				cmd.Dir = dir
+				if err := cmd.Run(); err != nil {
+					return err
+				}
+				cmd = exec.Command("goimports", "-w", fileName)
+				cmd.Dir = dir
+				if err := cmd.Run(); err != nil {
+					return err
+				}
+
 				for _, srv := range f.Services {
 					for _, cg := range srv.CodeGeneration {
 						data, err := ReadFile(cg)
@@ -258,6 +270,16 @@ func Build(conf *Config, source bool) error {
 						_, fileName := filepath.Split(strings.ReplaceAll(cg, filepath.Ext(cg), ""))
 						path := filepath.Join(dir, fileName)
 						if err := os.WriteFile(path, out.Bytes(), os.ModePerm); err != nil {
+							return err
+						}
+						cmd := exec.Command("gofmt", "-w", fileName)
+						cmd.Dir = dir
+						if err := cmd.Run(); err != nil {
+							return err
+						}
+						cmd = exec.Command("goimports", "-w", fileName)
+						cmd.Dir = dir
+						if err := cmd.Run(); err != nil {
 							return err
 						}
 					}

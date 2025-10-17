@@ -10,9 +10,11 @@
         "bytes"
         "fmt"
         "io"
+        "context"
 
         "github.com/vedadiyan/protolizer"
     )
+
 
     {{- range $message := .Messages}}
         {{- template "Message" $message }}
@@ -21,4 +23,6 @@
     {{- range $enum := .Enums}}
         {{- template "Enum" $enum }}
     {{- end}}
+
+    {{- template "Service" . }}
 {{- end }}

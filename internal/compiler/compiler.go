@@ -20,6 +20,7 @@ import (
 	"github.com/bufbuild/protocompile"
 	"github.com/bufbuild/protocompile/linker"
 	"github.com/bufbuild/protocompile/protoutil"
+	"github.com/google/uuid"
 	"github.com/vedadiyan/protov/internal/system/protoc"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -205,6 +206,26 @@ type AST struct {
 	Files []*File
 }
 
+func parseTemplates(t *template.Template, templates ...string) (*template.Template, error) {
+	if len(templates) == 0 {
+		return nil, fmt.Errorf("template: no files named in call to ParseFiles")
+	}
+	for _, i := range templates {
+		name := uuid.New().String()
+		var tmpl *template.Template
+		if t == nil {
+			t = template.New(name)
+		}
+		tmpl = t.New(name)
+
+		_, err := tmpl.Parse(i)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return t, nil
+}
+
 func Compile(file *File) ([]byte, error) {
 	allTemplates := []string{
 		_decodeTemplate,
@@ -219,14 +240,10 @@ func Compile(file *File) ([]byte, error) {
 		_messageTemplate,
 		_serviceTemplate,
 	}
-	templates := template.New("test")
-
-	for _, t := range allTemplates {
-		template, err := templates.Parse(t)
-		if err != nil {
-			return nil, err
-		}
-		templates = template
+	template := template.New("temp")
+	templates, err := parseTemplates(template, allTemplates...)
+	if err != nil {
+		return nil, err
 	}
 	out := bytes.NewBuffer([]byte{})
 	if err := templates.ExecuteTemplate(out, "Main", file); err != nil {
