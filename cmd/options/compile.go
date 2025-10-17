@@ -8,6 +8,7 @@ import (
 	"strings"
 	"text/template"
 
+	flaggy "github.com/vedadiyan/flaggy/pkg"
 	"github.com/vedadiyan/protov/internal/compiler"
 )
 
@@ -19,6 +20,21 @@ type Compile struct {
 }
 
 func (x *Compile) Run() error {
+	if x.Help {
+		flaggy.PrintHelp()
+		return nil
+	}
+
+	if len(x.Files) == 0 {
+		flaggy.PrintHelp()
+		return fmt.Errorf("please provide at least one file")
+	}
+
+	if len(x.Output) == 0 {
+		flaggy.PrintHelp()
+		return fmt.Errorf("output is required")
+	}
+
 	for _, f := range x.Files {
 		ast, err := compiler.Parse(f)
 		if err != nil {
