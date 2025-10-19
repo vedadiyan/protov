@@ -1,102 +1,127 @@
 package options
 
 import (
-	"bytes"
+	"errors"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
-	"text/template"
 
 	flaggy "github.com/vedadiyan/flaggy/pkg"
+
 	"github.com/vedadiyan/protov/internal/compiler"
 )
 
+var (
+	ErrNoFiles   = errors.New("no files provided")
+	ErrNoOutput  = errors.New("output directory not specified")
+	ErrBatchFail = errors.New("batch compilation failed")
+)
+
+// Compile handles proto file compilation
 type Compile struct {
 	Files  []string `long:"--file" short:"-f" help:"a list of files to be compiled like: -f a.proto -f b.proto"`
 	Output string   `long:"--out" short:"-o" help:"output directory where the compiled files should be saved"`
-	// Method string   `long:"--method" help:"compilation method (fast-codec, pretty-codec) with fast-codec being default"`
-	Help bool `long:"help" help:"shows help"`
+	Help   bool     `long:"help" help:"shows help"`
+
+	validator         *FileValidator
+	protoCompiler     *ProtoCompiler
+	templateProcessor *TemplateProcessor
 }
 
-func (x *Compile) Run() error {
-	if x.Help {
+// NewCompile creates a new Compile instance with dependencies
+func NewCompile() *Compile {
+	return &Compile{
+		validator:         &FileValidator{},
+		protoCompiler:     NewProtoCompiler(),
+		templateProcessor: NewTemplateProcessor(),
+	}
+}
+
+// Run executes the compilation process
+func (c *Compile) Run() error {
+	if c.Help {
 		flaggy.PrintHelp()
 		return nil
 	}
 
-	if len(x.Files) == 0 {
+	if err := c.validate(); err != nil {
 		flaggy.PrintHelp()
-		return fmt.Errorf("please provide at least one file")
+		return err
 	}
 
-	if len(x.Output) == 0 {
-		flaggy.PrintHelp()
-		return fmt.Errorf("output is required")
+	if err := c.checkPrerequisites(); err != nil {
+		return fmt.Errorf("prerequisite check failed: %w", err)
 	}
 
-	for _, f := range x.Files {
-		ast, err := compiler.Parse(f)
-		if err != nil {
-			return err
-		}
-		for _, file := range ast.Files {
-			compiled, err := compiler.Compile(file)
-			if err != nil {
-				return err
-			}
-			dir := filepath.Join(x.Output, file.FilePath)
-			if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-				return err
-			}
-			fileName := fmt.Sprintf("%s.pb.go", file.FileName)
-			path := filepath.Join(dir, fileName)
-			if err := os.WriteFile(path, compiled, os.ModePerm); err != nil {
-				return err
-			}
-			cmd := exec.Command("gofmt", "-w", fileName)
-			cmd.Dir = dir
-			if err := cmd.Run(); err != nil {
-				return err
-			}
-			cmd = exec.Command("goimports", "-w", fileName)
-			cmd.Dir = dir
-			if err := cmd.Run(); err != nil {
-				return err
-			}
-			for _, srv := range file.Services {
-				for _, cg := range srv.CodeGeneration {
-					data, err := ReadFile(cg)
-					if err != nil {
-						return err
-					}
-					template, err := template.New("temp").Parse(string(data))
-					if err != nil {
-						return err
-					}
-					out := bytes.NewBuffer([]byte{})
-					if err := template.Execute(out, ast); err != nil {
-						return err
-					}
-					_, fileName := filepath.Split(strings.ReplaceAll(cg, filepath.Ext(cg), ""))
-					path := filepath.Join(dir, fileName)
-					if err := os.WriteFile(path, out.Bytes(), os.ModePerm); err != nil {
-						return err
-					}
-					cmd := exec.Command("gofmt", "-w", fileName)
-					cmd.Dir = dir
-					if err := cmd.Run(); err != nil {
-						return err
-					}
-					cmd = exec.Command("goimports", "-w", fileName)
-					cmd.Dir = dir
-					if err := cmd.Run(); err != nil {
-						return err
-					}
-				}
-			}
+	return c.compileFiles()
+}
+
+// validate performs input validation
+func (c *Compile) validate() error {
+	if len(c.Files) == 0 {
+		return ErrNoFiles
+	}
+
+	for i, file := range c.Files {
+		if err := c.validator.ValidateProtoFile(file); err != nil {
+			return fmt.Errorf("invalid file at index %d: %w", i, err)
 		}
 	}
+
+	if len(c.Output) == 0 {
+		return ErrNoOutput
+	}
+
+	if err := c.validator.ValidateOutputPath(c.Output); err != nil {
+		return fmt.Errorf("invalid output directory: %w", err)
+	}
+
+	return nil
+}
+
+// checkPrerequisites verifies required tools are available
+func (c *Compile) checkPrerequisites() error {
+	runner := NewCommandRunner(CommandTimeout)
+	return runner.CheckTools([]string{"gofmt", "goimports"})
+}
+
+// compileFiles compiles all proto files
+func (c *Compile) compileFiles() error {
+	var errors []error
+
+	for _, file := range c.Files {
+		if err := c.compileFile(file); err != nil {
+			errors = append(errors, fmt.Errorf("failed to compile %q: %w", file, err))
+		}
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("%w: %v", ErrBatchFail, errors)
+	}
+
+	return nil
+}
+
+// compileFile compiles a single proto file
+func (c *Compile) compileFile(protoPath string) error {
+	ast, err := c.protoCompiler.CompileFile(protoPath, c.Output)
+	if err != nil {
+		return err
+	}
+
+	return c.processCodeGeneration(ast)
+}
+
+// processCodeGeneration processes code generation for all files in the AST
+func (c *Compile) processCodeGeneration(ast *compiler.AST) error {
+	for _, file := range ast.Files {
+		outputDir := c.Output
+		if file.FilePath != "" {
+			outputDir = c.Output + "/" + file.FilePath
+		}
+
+		if err := c.templateProcessor.ProcessServiceCodeGeneration(file, ast, outputDir); err != nil {
+			return fmt.Errorf("code generation failed for %q: %w", file.FileName, err)
+		}
+	}
+
 	return nil
 }
