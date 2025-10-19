@@ -48,6 +48,10 @@ func exportEnv(protoPath string) error {
 	if err != nil {
 		return err
 	}
+	path := os.Getenv("PATH")
+	if strings.Contains(path, protoPath) {
+		return nil
+	}
 	profile := filepath.Join(homeDir, ".bashrc")
 	file, err := os.OpenFile(profile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
