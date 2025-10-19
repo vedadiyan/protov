@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/vedadiyan/protov/internal/compiler"
+	"github.com/vedadiyan/protov/internal/system/protoc"
 )
 
 const (
@@ -35,10 +36,9 @@ var (
 )
 
 // FileValidator provides file validation utilities
-type FileValidator struct{}
 
 // ValidateFilePath validates a file path for security and correctness
-func (fv *FileValidator) ValidateFilePath(path string) error {
+func ValidateFilePath(path string) error {
 	if path == "" {
 		return fmt.Errorf("%w: empty path", ErrInvalidPath)
 	}
@@ -66,8 +66,8 @@ func (fv *FileValidator) ValidateFilePath(path string) error {
 }
 
 // ValidateFileExists checks if a file exists and is accessible
-func (fv *FileValidator) ValidateFileExists(path string) error {
-	if err := fv.ValidateFilePath(path); err != nil {
+func ValidateFileExists(path string) error {
+	if err := ValidateFilePath(path); err != nil {
 		return err
 	}
 
@@ -91,8 +91,8 @@ func (fv *FileValidator) ValidateFileExists(path string) error {
 }
 
 // ValidateProtoFile validates that a file is a .proto file
-func (fv *FileValidator) ValidateProtoFile(path string) error {
-	if err := fv.ValidateFileExists(path); err != nil {
+func ValidateProtoFile(path string) error {
+	if err := ValidateFileExists(path); err != nil {
 		return err
 	}
 
@@ -104,7 +104,7 @@ func (fv *FileValidator) ValidateProtoFile(path string) error {
 }
 
 // ValidateOutputPath validates an output directory path
-func (fv *FileValidator) ValidateOutputPath(path string) error {
+func ValidateOutputPath(path string) error {
 	if path == "" {
 		return fmt.Errorf("%w: empty output path", ErrInvalidPath)
 	}
@@ -135,21 +135,9 @@ func (fv *FileValidator) ValidateOutputPath(path string) error {
 	return nil
 }
 
-// FileIO handles safe file operations
-type FileIO struct {
-	validator *FileValidator
-}
-
-// NewFileIO creates a new FileIO instance
-func NewFileIO() *FileIO {
-	return &FileIO{
-		validator: &FileValidator{},
-	}
-}
-
 // ReadFile reads a file safely with validation
-func (fio *FileIO) ReadFile(path string) ([]byte, error) {
-	if err := fio.validator.ValidateFilePath(path); err != nil {
+func ReadFile(path string) ([]byte, error) {
+	if err := ValidateFilePath(path); err != nil {
 		return nil, err
 	}
 
@@ -174,12 +162,12 @@ func (fio *FileIO) ReadFile(path string) ([]byte, error) {
 }
 
 // WriteFile writes data to a file safely with validation
-func (fio *FileIO) WriteFile(path string, data []byte, perm os.FileMode) error {
+func WriteFile(path string, data []byte, perm os.FileMode) error {
 	if len(data) == 0 {
 		return ErrEmptyData
 	}
 
-	if err := fio.validator.ValidateFilePath(path); err != nil {
+	if err := ValidateFilePath(path); err != nil {
 		return err
 	}
 
@@ -191,8 +179,8 @@ func (fio *FileIO) WriteFile(path string, data []byte, perm os.FileMode) error {
 }
 
 // EnsureDirectory creates a directory if it doesn't exist
-func (fio *FileIO) EnsureDirectory(path string, perm os.FileMode) error {
-	if err := fio.validator.ValidateFilePath(path); err != nil {
+func EnsureDirectory(path string, perm os.FileMode) error {
+	if err := ValidateFilePath(path); err != nil {
 		return err
 	}
 
@@ -204,7 +192,7 @@ func (fio *FileIO) EnsureDirectory(path string, perm os.FileMode) error {
 }
 
 // SanitizeFilename removes potentially dangerous characters from filenames
-func (fio *FileIO) SanitizeFilename(name string) string {
+func SanitizeFilename(name string) string {
 	name = strings.ReplaceAll(name, "/", "")
 	name = strings.ReplaceAll(name, "\\", "")
 	name = strings.ReplaceAll(name, "..", "")
@@ -219,38 +207,28 @@ func (fio *FileIO) SanitizeFilename(name string) string {
 }
 
 // ReadTemplateFile reads a template file from absolute path or PROTOV_HOME
-func (fio *FileIO) ReadTemplateFile(file string) ([]byte, error) {
+func ReadTemplateFile(file string) ([]byte, error) {
 	cleaned := filepath.Clean(file)
 
 	if filepath.IsAbs(cleaned) {
-		return fio.ReadFile(cleaned)
+		return ReadFile(cleaned)
 	}
 
-	basePath := os.Getenv("PROTOV_HOME")
+	basePath, err := protoc.ProtoPath()
+	if err != nil {
+		return nil, err
+	}
 	if basePath == "" {
-		return nil, errors.New("PROTOV_HOME environment variable not set")
+		return nil, errors.New("protov environment variable not set")
 	}
 
 	templatePath := filepath.Join(basePath, "templates", cleaned)
-	return fio.ReadFile(templatePath)
-}
-
-// CommandRunner handles external command execution
-type CommandRunner struct {
-	timeout time.Duration
-}
-
-// NewCommandRunner creates a new CommandRunner
-func NewCommandRunner(timeout time.Duration) *CommandRunner {
-	if timeout == 0 {
-		timeout = CommandTimeout
-	}
-	return &CommandRunner{timeout: timeout}
+	return ReadFile(templatePath)
 }
 
 // Run executes a command with timeout and error handling
-func (cr *CommandRunner) Run(name string, dir string, args ...string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), cr.timeout)
+func Run(name string, dir string, args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), CommandTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, name, args...)
@@ -270,8 +248,8 @@ func (cr *CommandRunner) Run(name string, dir string, args ...string) error {
 }
 
 // RunWithOutput executes a command and returns its output
-func (cr *CommandRunner) RunWithOutput(name string, dir string, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), cr.timeout)
+func RunWithOutput(name string, dir string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), CommandTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, name, args...)
@@ -289,7 +267,7 @@ func (cr *CommandRunner) RunWithOutput(name string, dir string, args ...string) 
 }
 
 // CheckTool verifies that a tool is available in PATH
-func (cr *CommandRunner) CheckTool(name string) error {
+func CheckTool(name string) error {
 	if _, err := exec.LookPath(name); err != nil {
 		return fmt.Errorf("%w: %s", ErrToolNotFound, name)
 	}
@@ -297,67 +275,39 @@ func (cr *CommandRunner) CheckTool(name string) error {
 }
 
 // CheckTools verifies multiple tools are available
-func (cr *CommandRunner) CheckTools(tools []string) error {
+func CheckTools(tools []string) error {
 	for _, tool := range tools {
-		if err := cr.CheckTool(tool); err != nil {
+		if err := CheckTool(tool); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// GoFormatter handles Go code formatting
-type GoFormatter struct {
-	runner *CommandRunner
-}
-
-// NewGoFormatter creates a new GoFormatter
-func NewGoFormatter() *GoFormatter {
-	return &GoFormatter{
-		runner: NewCommandRunner(CommandTimeout),
-	}
-}
-
 // Format formats a Go file using gofmt and goimports
-func (gf *GoFormatter) Format(dir, fileName string) error {
-	if err := gf.runner.CheckTools([]string{"gofmt", "goimports"}); err != nil {
+func Format(dir, fileName string) error {
+	if err := CheckTools([]string{"gofmt", "goimports"}); err != nil {
 		return err
 	}
 
-	if err := gf.runner.Run("gofmt", dir, "-w", fileName); err != nil {
+	if err := Run("gofmt", dir, "-w", fileName); err != nil {
 		return fmt.Errorf("gofmt failed: %w", err)
 	}
 
-	if err := gf.runner.Run("goimports", dir, "-w", fileName); err != nil {
+	if err := Run("goimports", dir, "-w", fileName); err != nil {
 		return fmt.Errorf("goimports failed: %w", err)
 	}
 
 	return nil
 }
 
-// ProtoCompiler handles proto file compilation
-type ProtoCompiler struct {
-	fileIO    *FileIO
-	validator *FileValidator
-	formatter *GoFormatter
-}
-
-// NewProtoCompiler creates a new ProtoCompiler
-func NewProtoCompiler() *ProtoCompiler {
-	return &ProtoCompiler{
-		fileIO:    NewFileIO(),
-		validator: &FileValidator{},
-		formatter: NewGoFormatter(),
-	}
-}
-
 // CompileFile compiles a single proto file
-func (pc *ProtoCompiler) CompileFile(protoPath, outputDir string) (*compiler.AST, error) {
-	if err := pc.validator.ValidateProtoFile(protoPath); err != nil {
+func CompileFile(protoPath, outputDir string) (*compiler.AST, error) {
+	if err := ValidateProtoFile(protoPath); err != nil {
 		return nil, fmt.Errorf("invalid proto file: %w", err)
 	}
 
-	if err := pc.validator.ValidateOutputPath(outputDir); err != nil {
+	if err := ValidateOutputPath(outputDir); err != nil {
 		return nil, fmt.Errorf("invalid output directory: %w", err)
 	}
 
@@ -371,7 +321,7 @@ func (pc *ProtoCompiler) CompileFile(protoPath, outputDir string) (*compiler.AST
 	}
 
 	for _, file := range ast.Files {
-		if err := pc.compileAndWriteFile(file, outputDir); err != nil {
+		if err := compileAndWriteFile(file, outputDir); err != nil {
 			return nil, fmt.Errorf("compilation error for %q: %w", file.FileName, err)
 		}
 	}
@@ -380,7 +330,7 @@ func (pc *ProtoCompiler) CompileFile(protoPath, outputDir string) (*compiler.AST
 }
 
 // compileAndWriteFile compiles and writes a single file
-func (pc *ProtoCompiler) compileAndWriteFile(file *compiler.File, outputDir string) error {
+func compileAndWriteFile(file *compiler.File, outputDir string) error {
 	compiled, err := compiler.Compile(file)
 	if err != nil {
 		return fmt.Errorf("compiler error: %w", err)
@@ -391,44 +341,30 @@ func (pc *ProtoCompiler) compileAndWriteFile(file *compiler.File, outputDir stri
 	}
 
 	dir := filepath.Join(outputDir, file.FilePath)
-	if err := pc.fileIO.EnsureDirectory(dir, 0755); err != nil {
+	if err := EnsureDirectory(dir, 0755); err != nil {
 		return err
 	}
 
-	fileName := pc.fileIO.SanitizeFilename(fmt.Sprintf("%s.pb.go", file.FileName))
+	fileName := SanitizeFilename(fmt.Sprintf("%s.pb.go", file.FileName))
 	if fileName == "" {
 		return ErrInvalidFilename
 	}
 
 	filePath := filepath.Join(dir, fileName)
-	if err := pc.fileIO.WriteFile(filePath, compiled, 0644); err != nil {
+	if err := WriteFile(filePath, compiled, 0644); err != nil {
 		return err
 	}
 
-	if err := pc.formatter.Format(dir, fileName); err != nil {
+	if err := Format(dir, fileName); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// TemplateProcessor handles template-based code generation
-type TemplateProcessor struct {
-	fileIO    *FileIO
-	formatter *GoFormatter
-}
-
-// NewTemplateProcessor creates a new TemplateProcessor
-func NewTemplateProcessor() *TemplateProcessor {
-	return &TemplateProcessor{
-		fileIO:    NewFileIO(),
-		formatter: NewGoFormatter(),
-	}
-}
-
 // ProcessTemplate processes a template file and generates output
-func (tp *TemplateProcessor) ProcessTemplate(templatePath string, data interface{}, outputDir, outputName string) error {
-	templateData, err := tp.fileIO.ReadTemplateFile(templatePath)
+func ProcessTemplate(templatePath string, data interface{}, outputDir, outputName string) error {
+	templateData, err := ReadTemplateFile(templatePath)
 	if err != nil {
 		return fmt.Errorf("failed to read template: %w", err)
 	}
@@ -451,19 +387,19 @@ func (tp *TemplateProcessor) ProcessTemplate(templatePath string, data interface
 		return fmt.Errorf("%w: template produced no output", ErrEmptyData)
 	}
 
-	fileName := tp.fileIO.SanitizeFilename(outputName)
+	fileName := SanitizeFilename(outputName)
 	if fileName == "" {
 		return ErrInvalidFilename
 	}
 
 	outputPath := filepath.Join(outputDir, fileName)
-	if err := tp.fileIO.WriteFile(outputPath, out.Bytes(), 0644); err != nil {
+	if err := WriteFile(outputPath, out.Bytes(), 0644); err != nil {
 		return err
 	}
 
 	// Format if it's a Go file
 	if strings.HasSuffix(fileName, ".go") {
-		if err := tp.formatter.Format(outputDir, fileName); err != nil {
+		if err := Format(outputDir, fileName); err != nil {
 			return fmt.Errorf("formatting error: %w", err)
 		}
 	}
@@ -472,13 +408,13 @@ func (tp *TemplateProcessor) ProcessTemplate(templatePath string, data interface
 }
 
 // ProcessServiceCodeGeneration processes code generation for services
-func (tp *TemplateProcessor) ProcessServiceCodeGeneration(file *compiler.File, ast *compiler.AST, outputDir string) error {
+func ProcessServiceCodeGeneration(file *compiler.File, ast *compiler.AST, outputDir string) error {
 	for _, srv := range file.Services {
 		for _, cg := range srv.CodeGeneration {
 			baseName := filepath.Base(cg)
 			outputName := strings.TrimSuffix(baseName, filepath.Ext(baseName))
 
-			if err := tp.ProcessTemplate(cg, ast, outputDir, outputName); err != nil {
+			if err := ProcessTemplate(cg, ast, outputDir, outputName); err != nil {
 				return fmt.Errorf("failed to process template %q: %w", cg, err)
 			}
 		}

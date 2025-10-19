@@ -35,7 +35,7 @@ var (
 	ErrInvalidReplace    = errors.New("invalid replace format")
 	ErrBuildFailed       = errors.New("build failed")
 	ErrNoTag             = errors.New("tag is required")
-	ErrProtoVHomeNotSet  = errors.New("PROTOV_HOME environment variable not set")
+	ErrProtoVHomeNotSet  = errors.New("protov environment variable not set")
 )
 
 // Config represents the module configuration
@@ -115,14 +115,6 @@ type Module struct {
 
 // ModuleInit initializes a new module configuration
 type ModuleInit struct {
-	fileIO *FileIO
-}
-
-// NewModuleInit creates a new ModuleInit instance
-func NewModuleInit() *ModuleInit {
-	return &ModuleInit{
-		fileIO: NewFileIO(),
-	}
 }
 
 // Run executes the module initialization
@@ -144,7 +136,7 @@ func (mi *ModuleInit) Run() error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	if err := mi.fileIO.WriteFile(ConfigFilename, data, 0644); err != nil {
+	if err := WriteFile(ConfigFilename, data, 0644); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
@@ -176,17 +168,6 @@ func (mi *ModuleInit) createDefaultConfig() *Config {
 type ModuleBuild struct {
 	Source bool `long:"--source" help:"builds the module into Go source code"`
 	Help   bool `long:"help" help:"shows help"`
-
-	fileIO    *FileIO
-	validator *FileValidator
-}
-
-// NewModuleBuild creates a new ModuleBuild instance
-func NewModuleBuild() *ModuleBuild {
-	return &ModuleBuild{
-		fileIO:    NewFileIO(),
-		validator: &FileValidator{},
-	}
 }
 
 // Run executes the module build
@@ -205,13 +186,12 @@ func (mb *ModuleBuild) Run() error {
 		return fmt.Errorf("invalid config: %w", err)
 	}
 
-	builder := NewModuleBuilder(mb.fileIO, mb.validator)
-	return builder.Build(config, mb.Source)
+	return Build(config, mb.Source)
 }
 
 // loadConfig loads the module configuration
 func (mb *ModuleBuild) loadConfig() (*Config, error) {
-	data, err := mb.fileIO.ReadFile(ConfigFilename)
+	data, err := ReadFile(ConfigFilename)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, ErrConfigNotFound
@@ -234,19 +214,6 @@ type ModuleDockerize struct {
 	Platform *string `long:"--platform" help:"specifies the platform for which the image must be built"`
 	Buildx   bool    `long:"--buildx" help:"use buildx to build the image"`
 	Help     bool    `long:"help" help:"shows help"`
-
-	fileIO    *FileIO
-	validator *FileValidator
-	runner    *CommandRunner
-}
-
-// NewModuleDockerize creates a new ModuleDockerize instance
-func NewModuleDockerize() *ModuleDockerize {
-	return &ModuleDockerize{
-		fileIO:    NewFileIO(),
-		validator: &FileValidator{},
-		runner:    NewCommandRunner(CommandTimeout),
-	}
 }
 
 // Run executes the module dockerization
@@ -275,8 +242,7 @@ func (md *ModuleDockerize) Run() error {
 		return fmt.Errorf("invalid config: %w", err)
 	}
 
-	builder := NewModuleBuilder(md.fileIO, md.validator)
-	if err := builder.Build(config, false); err != nil {
+	if err := Build(config, false); err != nil {
 		return fmt.Errorf("build failed: %w", err)
 	}
 
@@ -285,7 +251,7 @@ func (md *ModuleDockerize) Run() error {
 
 // loadConfig loads the module configuration
 func (md *ModuleDockerize) loadConfig() (*Config, error) {
-	data, err := md.fileIO.ReadFile(ConfigFilename)
+	data, err := ReadFile(ConfigFilename)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, ErrConfigNotFound
@@ -319,12 +285,12 @@ func (md *ModuleDockerize) dockerizeModules(config *Config) error {
 // dockerizeModule builds a Docker image for a single module
 func (md *ModuleDockerize) dockerizeModule(module ModuleConfig, builder, buildxFlag, platform string) error {
 	dockerfilePath := filepath.Join(module.Destination, "Dockerfile")
-	if err := md.fileIO.WriteFile(dockerfilePath, []byte(DockerfileTemplate), 0644); err != nil {
+	if err := WriteFile(dockerfilePath, []byte(DockerfileTemplate), 0644); err != nil {
 		return fmt.Errorf("failed to write Dockerfile: %w", err)
 	}
 
 	args := md.buildDockerArgs(buildxFlag, platform)
-	if err := md.runner.Run(builder, module.Destination, args...); err != nil {
+	if err := Run(builder, module.Destination, args...); err != nil {
 		return fmt.Errorf("docker build failed: %w", err)
 	}
 
@@ -380,34 +346,14 @@ func (md *ModuleDockerize) buildDockerArgs(buildxFlag, platform string) []string
 	return args
 }
 
-// ModuleBuilder handles the building of modules
-type ModuleBuilder struct {
-	fileIO            *FileIO
-	validator         *FileValidator
-	runner            *CommandRunner
-	protoCompiler     *ProtoCompiler
-	templateProcessor *TemplateProcessor
-}
-
-// NewModuleBuilder creates a new ModuleBuilder
-func NewModuleBuilder(fileIO *FileIO, validator *FileValidator) *ModuleBuilder {
-	return &ModuleBuilder{
-		fileIO:            fileIO,
-		validator:         validator,
-		runner:            NewCommandRunner(CommandTimeout),
-		protoCompiler:     NewProtoCompiler(),
-		templateProcessor: NewTemplateProcessor(),
-	}
-}
-
 // Build builds all modules in the configuration
-func (mb *ModuleBuilder) Build(config *Config, sourceOnly bool) error {
+func Build(config *Config, sourceOnly bool) error {
 	if config == nil {
 		return fmt.Errorf("%w: config is nil", ErrInvalidConfig)
 	}
 
 	for _, module := range config.Modules {
-		if err := mb.buildModule(module, sourceOnly); err != nil {
+		if err := buildModule(module, sourceOnly); err != nil {
 			return fmt.Errorf("failed to build module %q: %w", module.Name, err)
 		}
 	}
@@ -416,26 +362,26 @@ func (mb *ModuleBuilder) Build(config *Config, sourceOnly bool) error {
 }
 
 // buildModule builds a single module
-func (mb *ModuleBuilder) buildModule(module ModuleConfig, sourceOnly bool) error {
-	if err := mb.fileIO.EnsureDirectory(module.Destination, 0755); err != nil {
+func buildModule(module ModuleConfig, sourceOnly bool) error {
+	if err := EnsureDirectory(module.Destination, 0755); err != nil {
 		return err
 	}
 
-	if err := mb.createGoMod(module); err != nil {
+	if err := createGoMod(module); err != nil {
 		return fmt.Errorf("failed to create go.mod: %w", err)
 	}
 
-	files, err := mb.compileProtoFiles(module)
+	files, err := compileProtoFiles(module)
 	if err != nil {
 		return fmt.Errorf("proto compilation failed: %w", err)
 	}
 
-	if err := mb.generateMainFiles(module, files); err != nil {
+	if err := generateMainFiles(module, files); err != nil {
 		return fmt.Errorf("main generation failed: %w", err)
 	}
 
 	if !sourceOnly {
-		if err := mb.buildBinary(module); err != nil {
+		if err := buildBinary(module); err != nil {
 			return fmt.Errorf("binary build failed: %w", err)
 		}
 	}
@@ -444,7 +390,7 @@ func (mb *ModuleBuilder) buildModule(module ModuleConfig, sourceOnly bool) error
 }
 
 // createGoMod creates a go.mod file for the module
-func (mb *ModuleBuilder) createGoMod(module ModuleConfig) error {
+func createGoMod(module ModuleConfig) error {
 	mod := new(modfile.File)
 
 	if err := mod.AddModuleStmt(module.Mod); err != nil {
@@ -456,13 +402,13 @@ func (mb *ModuleBuilder) createGoMod(module ModuleConfig) error {
 	}
 
 	for _, dep := range module.Dependencies {
-		if err := mb.addDependency(mod, dep); err != nil {
+		if err := addDependency(mod, dep); err != nil {
 			return err
 		}
 	}
 
 	for _, repl := range module.Replacements {
-		if err := mb.addReplacement(mod, repl); err != nil {
+		if err := addReplacement(mod, repl); err != nil {
 			return err
 		}
 	}
@@ -473,11 +419,11 @@ func (mb *ModuleBuilder) createGoMod(module ModuleConfig) error {
 	}
 
 	modPath := filepath.Join(module.Destination, "go.mod")
-	return mb.fileIO.WriteFile(modPath, modBytes, 0644)
+	return WriteFile(modPath, modBytes, 0644)
 }
 
 // addDependency adds a dependency to the go.mod file
-func (mb *ModuleBuilder) addDependency(mod *modfile.File, dep string) error {
+func addDependency(mod *modfile.File, dep string) error {
 	parts, err := ParseDependency(dep)
 	if err != nil {
 		return err
@@ -491,7 +437,7 @@ func (mb *ModuleBuilder) addDependency(mod *modfile.File, dep string) error {
 }
 
 // addReplacement adds a replacement to the go.mod file
-func (mb *ModuleBuilder) addReplacement(mod *modfile.File, repl string) error {
+func addReplacement(mod *modfile.File, repl string) error {
 	segments := strings.Split(repl, "=>")
 	if len(segments) != 2 {
 		return fmt.Errorf("%w: expected format 'old => new', got %q", ErrInvalidReplace, repl)
@@ -515,7 +461,7 @@ func (mb *ModuleBuilder) addReplacement(mod *modfile.File, repl string) error {
 }
 
 // compileProtoFiles compiles all proto files for a module
-func (mb *ModuleBuilder) compileProtoFiles(module ModuleConfig) ([]*compiler.File, error) {
+func compileProtoFiles(module ModuleConfig) ([]*compiler.File, error) {
 	if len(module.ProtoFiles) == 0 {
 		return []*compiler.File{}, nil
 	}
@@ -523,16 +469,16 @@ func (mb *ModuleBuilder) compileProtoFiles(module ModuleConfig) ([]*compiler.Fil
 	var allFiles []*compiler.File
 
 	for _, protoPath := range module.ProtoFiles {
-		if err := mb.validator.ValidateProtoFile(protoPath); err != nil {
+		if err := ValidateProtoFile(protoPath); err != nil {
 			return nil, fmt.Errorf("invalid proto file %q: %w", protoPath, err)
 		}
 
-		ast, err := mb.protoCompiler.CompileFile(protoPath, module.Destination)
+		ast, err := CompileFile(protoPath, module.Destination)
 		if err != nil {
 			return nil, fmt.Errorf("failed to compile %q: %w", protoPath, err)
 		}
 
-		if err := mb.processCodeGeneration(ast, module.Destination); err != nil {
+		if err := processCodeGeneration(ast, module.Destination); err != nil {
 			return nil, err
 		}
 
@@ -543,10 +489,10 @@ func (mb *ModuleBuilder) compileProtoFiles(module ModuleConfig) ([]*compiler.Fil
 }
 
 // processCodeGeneration processes code generation for compiled files
-func (mb *ModuleBuilder) processCodeGeneration(ast *compiler.AST, destination string) error {
+func processCodeGeneration(ast *compiler.AST, destination string) error {
 	for _, file := range ast.Files {
 		outputDir := filepath.Join(destination, file.FilePath)
-		if err := mb.templateProcessor.ProcessServiceCodeGeneration(file, ast, outputDir); err != nil {
+		if err := ProcessServiceCodeGeneration(file, ast, outputDir); err != nil {
 			return fmt.Errorf("code generation failed: %w", err)
 		}
 	}
@@ -554,13 +500,13 @@ func (mb *ModuleBuilder) processCodeGeneration(ast *compiler.AST, destination st
 }
 
 // generateMainFiles generates main entry point files from templates
-func (mb *ModuleBuilder) generateMainFiles(module ModuleConfig, files []*compiler.File) error {
+func generateMainFiles(module ModuleConfig, files []*compiler.File) error {
 	if len(module.MainTemplate) == 0 {
 		return nil
 	}
 
 	cmdDir := filepath.Join(module.Destination, "cmd")
-	if err := mb.fileIO.EnsureDirectory(cmdDir, 0755); err != nil {
+	if err := EnsureDirectory(cmdDir, 0755); err != nil {
 		return err
 	}
 
@@ -568,7 +514,7 @@ func (mb *ModuleBuilder) generateMainFiles(module ModuleConfig, files []*compile
 		baseName := filepath.Base(templatePath)
 		outputName := strings.TrimSuffix(baseName, filepath.Ext(baseName))
 
-		if err := mb.templateProcessor.ProcessTemplate(templatePath, files, cmdDir, outputName); err != nil {
+		if err := ProcessTemplate(templatePath, files, cmdDir, outputName); err != nil {
 			return fmt.Errorf("failed to process main template %q: %w", templatePath, err)
 		}
 	}
@@ -577,7 +523,7 @@ func (mb *ModuleBuilder) generateMainFiles(module ModuleConfig, files []*compile
 }
 
 // buildBinary builds the Go binary for the module
-func (mb *ModuleBuilder) buildBinary(module ModuleConfig) error {
+func buildBinary(module ModuleConfig) error {
 	tmpDir := os.TempDir()
 	tmpBinary := filepath.Join(tmpDir, uuid.New().String())
 
@@ -585,15 +531,15 @@ func (mb *ModuleBuilder) buildBinary(module ModuleConfig) error {
 	buildArgs = append(buildArgs, module.BuildFlags...)
 
 	// Set environment variables
-	if err := mb.setEnvironment(module.Environment); err != nil {
+	if err := setEnvironment(module.Environment); err != nil {
 		return err
 	}
 
-	if err := mb.runner.Run("go", module.Destination, buildArgs...); err != nil {
+	if err := Run("go", module.Destination, buildArgs...); err != nil {
 		return fmt.Errorf("%w: %v", ErrBuildFailed, err)
 	}
 
-	if err := mb.cleanupAndMoveBinary(module, tmpBinary); err != nil {
+	if err := cleanupAndMoveBinary(module, tmpBinary); err != nil {
 		return err
 	}
 
@@ -601,7 +547,7 @@ func (mb *ModuleBuilder) buildBinary(module ModuleConfig) error {
 }
 
 // setEnvironment sets environment variables for the build
-func (mb *ModuleBuilder) setEnvironment(env map[string]string) error {
+func setEnvironment(env map[string]string) error {
 	for key, value := range env {
 		if err := os.Setenv(key, value); err != nil {
 			return fmt.Errorf("failed to set environment variable %s: %w", key, err)
@@ -611,7 +557,7 @@ func (mb *ModuleBuilder) setEnvironment(env map[string]string) error {
 }
 
 // cleanupAndMoveBinary cleans up source files and moves the binary
-func (mb *ModuleBuilder) cleanupAndMoveBinary(module ModuleConfig, tmpBinary string) error {
+func cleanupAndMoveBinary(module ModuleConfig, tmpBinary string) error {
 	entries, err := os.ReadDir(module.Destination)
 	if err != nil {
 		return fmt.Errorf("failed to read destination directory: %w", err)
@@ -624,7 +570,7 @@ func (mb *ModuleBuilder) cleanupAndMoveBinary(module ModuleConfig, tmpBinary str
 		}
 	}
 
-	binaryName := mb.getBinaryName(module.Environment["GOOS"])
+	binaryName := getBinaryName(module.Environment["GOOS"])
 	finalPath := filepath.Join(module.Destination, binaryName)
 
 	if err := os.Rename(tmpBinary, finalPath); err != nil {
@@ -640,7 +586,7 @@ func (mb *ModuleBuilder) cleanupAndMoveBinary(module ModuleConfig, tmpBinary str
 }
 
 // getBinaryName returns the appropriate binary name based on OS
-func (mb *ModuleBuilder) getBinaryName(goos string) string {
+func getBinaryName(goos string) string {
 	switch goos {
 	case "windows":
 		return "app.exe"

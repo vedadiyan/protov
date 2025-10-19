@@ -20,19 +20,6 @@ type Compile struct {
 	Files  []string `long:"--file" short:"-f" help:"a list of files to be compiled like: -f a.proto -f b.proto"`
 	Output string   `long:"--out" short:"-o" help:"output directory where the compiled files should be saved"`
 	Help   bool     `long:"help" help:"shows help"`
-
-	validator         *FileValidator
-	protoCompiler     *ProtoCompiler
-	templateProcessor *TemplateProcessor
-}
-
-// NewCompile creates a new Compile instance with dependencies
-func NewCompile() *Compile {
-	return &Compile{
-		validator:         &FileValidator{},
-		protoCompiler:     NewProtoCompiler(),
-		templateProcessor: NewTemplateProcessor(),
-	}
 }
 
 // Run executes the compilation process
@@ -61,7 +48,7 @@ func (c *Compile) validate() error {
 	}
 
 	for i, file := range c.Files {
-		if err := c.validator.ValidateProtoFile(file); err != nil {
+		if err := ValidateProtoFile(file); err != nil {
 			return fmt.Errorf("invalid file at index %d: %w", i, err)
 		}
 	}
@@ -70,7 +57,7 @@ func (c *Compile) validate() error {
 		return ErrNoOutput
 	}
 
-	if err := c.validator.ValidateOutputPath(c.Output); err != nil {
+	if err := ValidateOutputPath(c.Output); err != nil {
 		return fmt.Errorf("invalid output directory: %w", err)
 	}
 
@@ -79,8 +66,7 @@ func (c *Compile) validate() error {
 
 // checkPrerequisites verifies required tools are available
 func (c *Compile) checkPrerequisites() error {
-	runner := NewCommandRunner(CommandTimeout)
-	return runner.CheckTools([]string{"gofmt", "goimports"})
+	return CheckTools([]string{"gofmt", "goimports"})
 }
 
 // compileFiles compiles all proto files
@@ -102,7 +88,7 @@ func (c *Compile) compileFiles() error {
 
 // compileFile compiles a single proto file
 func (c *Compile) compileFile(protoPath string) error {
-	ast, err := c.protoCompiler.CompileFile(protoPath, c.Output)
+	ast, err := CompileFile(protoPath, c.Output)
 	if err != nil {
 		return err
 	}
@@ -118,7 +104,7 @@ func (c *Compile) processCodeGeneration(ast *compiler.AST) error {
 			outputDir = c.Output + "/" + file.FilePath
 		}
 
-		if err := c.templateProcessor.ProcessServiceCodeGeneration(file, ast, outputDir); err != nil {
+		if err := ProcessServiceCodeGeneration(file, ast, outputDir); err != nil {
 			return fmt.Errorf("code generation failed for %q: %w", file.FileName, err)
 		}
 	}

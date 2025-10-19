@@ -32,19 +32,6 @@ type Pull struct {
 type Proto struct {
 	Repo string `long:"--repo" help:"link to the repository"`
 	Help bool   `long:"help" help:"shows help"`
-
-	runner    *CommandRunner
-	fileIO    *FileIO
-	validator *FileValidator
-}
-
-// NewProto creates a new Proto instance
-func NewProto() *Proto {
-	return &Proto{
-		runner:    NewCommandRunner(CommandTimeout),
-		fileIO:    NewFileIO(),
-		validator: &FileValidator{},
-	}
 }
 
 // Run executes the proto dependency pull
@@ -81,7 +68,7 @@ func (p *Proto) validate() error {
 
 // checkPrerequisites verifies required tools are available
 func (p *Proto) checkPrerequisites() error {
-	if err := p.runner.CheckTool("git"); err != nil {
+	if err := CheckTool("git"); err != nil {
 		return ErrGitNotFound
 	}
 	return nil
@@ -101,12 +88,12 @@ func (p *Proto) pullRepository() error {
 	includeDir := filepath.Join(protoPath, "include")
 
 	// Validate and create directory
-	if err := p.fileIO.EnsureDirectory(includeDir, 0755); err != nil {
+	if err := EnsureDirectory(includeDir, 0755); err != nil {
 		return fmt.Errorf("%w: %v", ErrDirectoryCreate, err)
 	}
 
 	// Verify directory is writable
-	if err := p.validator.ValidateOutputPath(includeDir); err != nil {
+	if err := ValidateOutputPath(includeDir); err != nil {
 		return fmt.Errorf("include directory not writable: %w", err)
 	}
 
@@ -126,7 +113,7 @@ func (p *Proto) cloneRepo(repoURI, targetDir string) error {
 	args = append(args, "--depth", "1") // Shallow clone for efficiency
 	args = append(args, "--single-branch")
 
-	if err := p.runner.Run("git", targetDir, args...); err != nil {
+	if err := Run("git", targetDir, args...); err != nil {
 		return err
 	}
 
@@ -137,19 +124,6 @@ func (p *Proto) cloneRepo(repoURI, targetDir string) error {
 type Template struct {
 	Repo string `long:"--repo" help:"link to the template repository"`
 	Help bool   `long:"help" help:"shows help"`
-
-	runner    *CommandRunner
-	fileIO    *FileIO
-	validator *FileValidator
-}
-
-// NewTemplate creates a new Template instance
-func NewTemplate() *Template {
-	return &Template{
-		runner:    NewCommandRunner(CommandTimeout),
-		fileIO:    NewFileIO(),
-		validator: &FileValidator{},
-	}
 }
 
 // Run executes the template dependency pull
@@ -186,7 +160,7 @@ func (t *Template) validate() error {
 
 // checkPrerequisites verifies required tools are available
 func (t *Template) checkPrerequisites() error {
-	if err := t.runner.CheckTool("git"); err != nil {
+	if err := CheckTool("git"); err != nil {
 		return ErrGitNotFound
 	}
 	return nil
@@ -206,12 +180,12 @@ func (t *Template) pullRepository() error {
 	templatesDir := filepath.Join(protoPath, "templates")
 
 	// Validate and create directory
-	if err := t.fileIO.EnsureDirectory(templatesDir, 0755); err != nil {
+	if err := EnsureDirectory(templatesDir, 0755); err != nil {
 		return fmt.Errorf("%w: %v", ErrDirectoryCreate, err)
 	}
 
 	// Verify directory is writable
-	if err := t.validator.ValidateOutputPath(templatesDir); err != nil {
+	if err := ValidateOutputPath(templatesDir); err != nil {
 		return fmt.Errorf("templates directory not writable: %w", err)
 	}
 
@@ -231,7 +205,7 @@ func (t *Template) cloneRepo(repoURI, targetDir string) error {
 	args = append(args, "--depth", "1") // Shallow clone for efficiency
 	args = append(args, "--single-branch")
 
-	if err := t.runner.Run("git", targetDir, args...); err != nil {
+	if err := Run("git", targetDir, args...); err != nil {
 		return err
 	}
 
