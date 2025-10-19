@@ -19,7 +19,8 @@ import (
 
 const (
 	ConfigFilename     = "mod.yml"
-	DockerfileTemplate = `FROM alpine:latest
+	DockerfileTemplate = `
+FROM alpine:latest
 COPY . /srv
 RUN chmod 755 /srv/app
 WORKDIR /srv
