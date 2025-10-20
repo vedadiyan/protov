@@ -18,7 +18,7 @@ func ProtoPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	protocDir := filepath.Join(homeDir, "protv")
+	protocDir := filepath.Join(homeDir, "protov")
 	if err := os.MkdirAll(protocDir, 0755); err != nil {
 		return "", err
 	}

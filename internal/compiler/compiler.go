@@ -571,16 +571,21 @@ func (file *File) GetServices(md protoreflect.ServiceDescriptors) ([]*Service, e
 func (file *File) GetService(n int, service protoreflect.ServiceDescriptor) (*Service, error) {
 	methods := service.Methods()
 
-	sourceLocation := service.ParentFile().SourceLocations().ByDescriptor(service)
-
 	comments := make([]string, 0)
-	for _, comment := range sourceLocation.LeadingDetachedComments {
-		value := strings.TrimRight(comment, "\r\n")
-		value = strings.TrimRight(value, " ")
-		value = strings.TrimLeft(value, " ")
-		values := strings.Split(value, " ")
-		if len(values) == 2 && values[0] == "@generate" {
-			comments = append(comments, values[1])
+	if value, ok := file.Comments[fmt.Sprintf(".service[%d]", n)]; ok {
+		values := strings.Split(value, "\r\n")
+		for _, i := range values {
+			str := strings.TrimLeft(i, " ")
+			str = strings.TrimRight(str, " ")
+			strs := strings.Split(str, " ")
+			if len(str) > 1 {
+				switch strs[0] {
+				case "@generate":
+					{
+						comments = append(comments, strs[1])
+					}
+				}
+			}
 		}
 	}
 
