@@ -193,17 +193,8 @@ func GetFile(dir string, filePath string, file linker.File) (*File, error) {
 	out.Dir = dir
 	_, out.Source = path.Split(filePath)
 	out.FileName = strings.ReplaceAll(strings.ToLower(out.Source), ".proto", "")
-	out.Comments = make(map[string]string)
 	protodesc := protodesc.ToFileDescriptorProto(file)
-	for _, i := range protodesc.SourceCodeInfo.Location {
-		if i.LeadingComments != nil {
-			path := file.SourceLocations().ByPath(i.Path).Path.String()
-			value := strings.TrimRight(*i.LeadingComments, "\r\n")
-			value = strings.TrimRight(value, " ")
-			value = strings.TrimLeft(value, " ")
-			out.Comments[path] = value
-		}
-	}
+	out.Comments = GetComments(protodesc, file)
 
 	if opts, ok := file.Options().(*descriptorpb.FileOptions); ok {
 		out.FilePath = opts.GetGoPackage()
@@ -828,5 +819,19 @@ func Trim(str string) string {
 	})
 	out = strings.TrimLeft(out, " ")
 
+	return out
+}
+
+func GetComments(protodesc *descriptorpb.FileDescriptorProto, file linker.File) map[string]string {
+	out := make(map[string]string)
+	for _, i := range protodesc.SourceCodeInfo.Location {
+		if i.LeadingComments != nil {
+			path := file.SourceLocations().ByPath(i.Path).Path.String()
+			value := strings.TrimRight(*i.LeadingComments, "\r\n")
+			value = strings.TrimRight(value, " ")
+			value = strings.TrimLeft(value, " ")
+			out[path] = value
+		}
+	}
 	return out
 }
