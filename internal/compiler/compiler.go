@@ -6,13 +6,10 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"fmt"
-	"io"
 	"maps"
-	"math"
 	"os"
 	"path"
 	"reflect"
-	"strconv"
 	"strings"
 	"text/template"
 	"unicode"
@@ -21,7 +18,6 @@ import (
 	"github.com/bufbuild/protocompile/linker"
 	"github.com/bufbuild/protocompile/protoutil"
 	"github.com/google/uuid"
-	"github.com/vedadiyan/protov/internal/system/protoc"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
@@ -55,176 +51,80 @@ var (
 	_serviceTemplate string
 )
 
-// Format is the serialization format used to represent the default value.
-type Format int
-type ByteString string
+type (
+	Field struct {
+		Name          string
+		Type          string
+		BaseType      string
+		KeyBaseType   string
+		IndexBaseType string
+		Options       map[string]any
+		Optional      bool
+		MarshalledTag string
+		Kind          reflect.Kind
+		Index         reflect.Kind
+		Key           reflect.Kind
+		FieldNum      int
+	}
 
-const (
-	_ Format = iota
-	// Descriptor uses the serialization format that protoc uses with the
-	// google.protobuf.FieldDescriptorProto.default_value field.
-	Descriptor
-	// GoTag uses the historical serialization format in Go struct field tags.
-	GoTag
+	EnumValue struct {
+		Name   string
+		Number int
+	}
+
+	Enum struct {
+		Name    string
+		Values  []*EnumValue
+		Options map[string]any
+		File    *File
+	}
+
+	Message struct {
+		Name       string
+		Fields     []*Field
+		Ignorables Ignorables
+		Options    map[string]any
+		Descriptor string
+		TypeName   string
+		File       *File
+	}
+
+	Service struct {
+		Name           string
+		Options        map[string]any
+		Descriptor     string
+		Rpcs           []*Rpc
+		RpcOptions     map[string]any
+		CodeGeneration []string
+		File           *File
+	}
+
+	Rpc struct {
+		Name        string
+		Options     map[string]any
+		Descriptor  string
+		Input       string
+		Output      string
+		ServiceName string
+	}
+
+	File struct {
+		Dir         string
+		PackageName string
+		FilePath    string
+		Source      string
+		Options     map[string]any
+		Messages    []*Message
+		Services    []*Service
+		Enums       []*Enum
+		Comments    map[string]string
+		FileName    string
+	}
+
+	AST struct {
+		Files []*File
+	}
 )
-
-// Ignorables is a set of message names to ignore during compilation.
-type Ignorables map[string]struct{}
-
-// Contains checks if a value exists in the ignorables set.
-func (i Ignorables) Contains(value string) bool {
-	_, exists := i[value]
-	return exists
-}
-
-// Add adds a value to the ignorables set.
-func (i Ignorables) Add(value string) {
-	i[value] = struct{}{}
-}
-
-// NewIgnorables creates a new Ignorables set.
-func NewIgnorables() Ignorables {
-	return make(Ignorables)
-}
-
-// Resolver resolves source files for protocol buffer compilation.
-type Resolver struct {
-	protocompile.SourceResolver
-	Dir string
-}
-
-// NewResolver creates a new Resolver for the given directory.
-func NewResolver(dir string) *Resolver {
-	r := &Resolver{Dir: dir}
-	r.Accessor = r.accessor
-	return r
-}
-
-func (r *Resolver) accessor(f string) (io.ReadCloser, error) {
-	// Normalize path separators
-	normalizedPath := strings.ReplaceAll(f, "\\", "/")
-	cleanPath := strings.TrimPrefix(normalizedPath, r.Dir)
-	cleanPath = strings.TrimPrefix(cleanPath, "/")
-
-	filePath := path.Join(r.Dir, cleanPath)
-
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		// Fallback to standard protoc include directory
-		protoPath, err := protoc.ProtoPath()
-		if err != nil {
-			return nil, err
-		}
-		fallbackPath := path.Join(protoPath, "include", cleanPath)
-		data, err = os.ReadFile(fallbackPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read %s from %s or %s: %w", f, filePath, fallbackPath, err)
-		}
-	}
-
-	return io.NopCloser(bytes.NewReader(data)), nil
-}
-
-// Field represents a protocol buffer field.
-type Field struct {
-	Name          string
-	Type          string
-	BaseType      string
-	KeyBaseType   string
-	IndexBaseType string
-	Options       map[string]any
-	Optional      bool
-	MarshalledTag string
-	Kind          reflect.Kind
-	Index         reflect.Kind
-	Key           reflect.Kind
-	FieldNum      int
-}
-
-// EnumValue represents a single enum value.
-type EnumValue struct {
-	Name   string
-	Number int
-}
-
-// Enum represents a protocol buffer enum.
-type Enum struct {
-	Name    string
-	Values  []*EnumValue
-	Options map[string]any
-	File    *File
-}
-
-// Message represents a protocol buffer message.
-type Message struct {
-	Name       string
-	Fields     []*Field
-	Ignorables Ignorables
-	Options    map[string]any
-	Descriptor string
-	TypeName   string
-	File       *File
-}
-
-// Message represents a protocol buffer service.
-type Service struct {
-	Name           string
-	Options        map[string]any
-	Descriptor     string
-	Rpcs           []*Rpc
-	RpcOptions     map[string]any
-	CodeGeneration []string
-	File           *File
-}
-
-// Message represents a protocol buffer rpc.
-type Rpc struct {
-	Name        string
-	Options     map[string]any
-	Descriptor  string
-	Input       string
-	Output      string
-	ServiceName string
-}
-
-// File represents a compiled protocol buffer file.
-type File struct {
-	Dir         string
-	PackageName string
-	FilePath    string
-	Source      string
-	Options     map[string]any
-	Messages    []*Message
-	Services    []*Service
-	Enums       []*Enum
-	Comments    map[string]string
-	FileName    string
-}
-
-// AST represents the complete abstract syntax tree of compiled files.
-type AST struct {
-	Files []*File
-}
-
-func parseTemplates(t *template.Template, templates ...string) (*template.Template, error) {
-	if len(templates) == 0 {
-		return nil, fmt.Errorf("template: no files named in call to ParseFiles")
-	}
-	for _, i := range templates {
-		name := uuid.New().String()
-		var tmpl *template.Template
-		if t == nil {
-			t = template.New(name)
-		}
-		tmpl = t.New(name)
-
-		_, err := tmpl.Parse(i)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return t, nil
-}
 
 func Compile(file *File) ([]byte, error) {
 	allTemplates := []string{
@@ -252,7 +152,6 @@ func Compile(file *File) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-// Parse compiles a protocol buffer file and returns its AST.
 func Parse(file string) (*AST, error) {
 	normalizedFile := strings.ReplaceAll(file, "\\", "/")
 	dir := path.Dir(normalizedFile) + "/"
@@ -287,7 +186,6 @@ func Parse(file string) (*AST, error) {
 	return ast, nil
 }
 
-// GetFile extracts file information from a linked file.
 func GetFile(dir string, filePath string, file linker.File) (*File, error) {
 	out := &File{
 		Options: make(map[string]any),
@@ -340,7 +238,6 @@ func GetFile(dir string, filePath string, file linker.File) (*File, error) {
 	return out, nil
 }
 
-// GetMessages extracts message information from message descriptors.
 func (file *File) GetMessages(md protoreflect.MessageDescriptors, ignoreList Ignorables) ([]*Message, error) {
 	l := md.Len()
 	if l == 0 {
@@ -362,7 +259,6 @@ func (file *File) GetMessages(md protoreflect.MessageDescriptors, ignoreList Ign
 			return nil, fmt.Errorf("failed to get message %s: %w", name, err)
 		}
 
-		// Encode descriptor as base64 JSON
 		protoDescriptor := protoutil.ProtoFromMessageDescriptor(messageDescriptor)
 		jsonData, err := protojson.Marshal(protoDescriptor)
 		if err != nil {
@@ -372,7 +268,6 @@ func (file *File) GetMessages(md protoreflect.MessageDescriptors, ignoreList Ign
 
 		out = append(out, message)
 
-		// Process nested messages recursively
 		if nestedMsgLen := messageDescriptor.Messages().Len(); nestedMsgLen != 0 {
 			nestedMessages, err := file.GetMessages(messageDescriptor.Messages(), message.Ignorables)
 			if err != nil {
@@ -385,7 +280,6 @@ func (file *File) GetMessages(md protoreflect.MessageDescriptors, ignoreList Ign
 	return out, nil
 }
 
-// GetMessage creates a Message from field descriptors.
 func (file *File) GetMessage(message protoreflect.MessageDescriptor) (*Message, error) {
 	name := message.Name()
 	fullName := message.FullName()
@@ -434,7 +328,6 @@ func (file *File) GetMessage(message protoreflect.MessageDescriptor) (*Message, 
 	return out, nil
 }
 
-// GetField creates a Field from a field descriptor.
 func (file *File) GetField(fd protoreflect.FieldDescriptor) (*Field, error) {
 	fieldType := getKind(fd)
 
@@ -457,7 +350,6 @@ func (file *File) GetField(fd protoreflect.FieldDescriptor) (*Field, error) {
 		})
 	}
 
-	// Determine field kind and related types
 	switch {
 	case fd.IsMap():
 		out.Kind = reflect.Map
@@ -478,7 +370,6 @@ func (file *File) GetField(fd protoreflect.FieldDescriptor) (*Field, error) {
 	return out, nil
 }
 
-// GetEnums extracts enum information from enum descriptors.
 func (file *File) GetEnums(md protoreflect.EnumDescriptors) ([]*Enum, error) {
 	l := md.Len()
 	if l == 0 {
@@ -499,7 +390,6 @@ func (file *File) GetEnums(md protoreflect.EnumDescriptors) ([]*Enum, error) {
 	return out, nil
 }
 
-// getEnum creates an Enum from enum value descriptors.
 func (file *File) getEnum(enum protoreflect.EnumDescriptor) (*Enum, error) {
 	name := enum.Name()
 	ed := enum.Values()
@@ -535,7 +425,6 @@ func (file *File) getEnum(enum protoreflect.EnumDescriptor) (*Enum, error) {
 	return out, nil
 }
 
-// GetServices extracts service information from service descriptors.
 func (file *File) GetServices(md protoreflect.ServiceDescriptors) ([]*Service, error) {
 	l := md.Len()
 	if l == 0 {
@@ -567,23 +456,17 @@ func (file *File) GetServices(md protoreflect.ServiceDescriptors) ([]*Service, e
 	return out, nil
 }
 
-// GetService creates a Service from service descriptors.
 func (file *File) GetService(n int, service protoreflect.ServiceDescriptor) (*Service, error) {
 	methods := service.Methods()
 
-	comments := make([]string, 0)
+	codeGeneration := make([]string, 0)
 	if value, ok := file.Comments[fmt.Sprintf(".service[%d]", n)]; ok {
-		values := strings.Split(value, "\r\n")
-		for _, i := range values {
-			str := strings.TrimLeft(i, " ")
-			str = strings.TrimRight(str, " ")
-			strs := strings.Split(str, " ")
-			if len(str) > 1 {
-				switch strs[0] {
-				case "@generate":
-					{
-						comments = append(comments, strs[1])
-					}
+		comments := ExpandComments(value)
+		for _, comment := range comments {
+			switch comment[0] {
+			case "@generate":
+				{
+					codeGeneration = append(codeGeneration, comment[1])
 				}
 			}
 		}
@@ -595,7 +478,7 @@ func (file *File) GetService(n int, service protoreflect.ServiceDescriptor) (*Se
 		Name:           string(service.Name()),
 		Rpcs:           make([]*Rpc, 0, l),
 		Options:        make(map[string]any),
-		CodeGeneration: comments,
+		CodeGeneration: codeGeneration,
 		File:           file,
 	}
 
@@ -643,6 +526,39 @@ func (file *File) GetService(n int, service protoreflect.ServiceDescriptor) (*Se
 
 	return out, nil
 }
+
+func (file *File) GetRpc(path string, serviceName string, fd protoreflect.MethodDescriptor) (*Rpc, error) {
+	input := fd.Input().Name()
+	output := fd.Output().Name()
+
+	out := &Rpc{
+		Name:        string(fd.Name()),
+		Input:       string(input),
+		Output:      string(output),
+		Options:     make(map[string]any),
+		ServiceName: serviceName,
+	}
+
+	if opts, ok := fd.Options().(*descriptorpb.MethodOptions); ok {
+		proto.RangeExtensions(opts, func(et protoreflect.ExtensionType, a any) bool {
+			fieldDescriptor := protodesc.ToFieldDescriptorProto(et.TypeDescriptor().Descriptor())
+			n1 := -1
+			if fieldDescriptor.Number != nil {
+				n1 = int(*fieldDescriptor.Number)
+			}
+			key := fmt.Sprintf("%s.%s",
+				et.TypeDescriptor().Parent().FullName().Name(),
+				et.TypeDescriptor().FullName().Name())
+			key = toGoName(key)
+			out.Options[key] = file.getInnerOptions(fmt.Sprintf("%s.%d", path, n1), a)
+			return true
+		})
+	}
+
+	return out, nil
+}
+
+// Helper functions
 
 func ConcatOptions(dest map[string]any, src map[string]any) {
 	for key, value := range src {
@@ -699,40 +615,6 @@ func ConcatOptionValues(dest map[string]any, src map[string]any) {
 	}
 }
 
-// GetRpc creates a Rpc from a method descriptor.
-func (file *File) GetRpc(path string, serviceName string, fd protoreflect.MethodDescriptor) (*Rpc, error) {
-	input := fd.Input().Name()
-	output := fd.Output().Name()
-
-	out := &Rpc{
-		Name:        string(fd.Name()),
-		Input:       string(input),
-		Output:      string(output),
-		Options:     make(map[string]any),
-		ServiceName: serviceName,
-	}
-
-	if opts, ok := fd.Options().(*descriptorpb.MethodOptions); ok {
-		proto.RangeExtensions(opts, func(et protoreflect.ExtensionType, a any) bool {
-			fieldDescriptor := protodesc.ToFieldDescriptorProto(et.TypeDescriptor().Descriptor())
-			n1 := -1
-			if fieldDescriptor.Number != nil {
-				n1 = int(*fieldDescriptor.Number)
-			}
-			key := fmt.Sprintf("%s.%s",
-				et.TypeDescriptor().Parent().FullName().Name(),
-				et.TypeDescriptor().FullName().Name())
-			key = toGoName(key)
-			out.Options[key] = file.getInnerOptions(fmt.Sprintf("%s.%d", path, n1), a)
-			return true
-		})
-	}
-
-	return out, nil
-}
-
-// Helper functions
-
 func (file *File) getInnerOptions(optionPath string, v any) any {
 	if v, ok := v.(*dynamicpb.Message); ok {
 		out := make(map[string]any)
@@ -755,15 +637,18 @@ func (file *File) getInnerOptions(optionPath string, v any) any {
 		return out
 	}
 	if value, ok := file.Comments[optionPath]; ok {
-		switch value {
-		case "@embed":
-			{
-				data, err := os.ReadFile(path.Join(file.Dir, v.(string)))
-				if err != nil {
-					panic(err)
-				}
+		comments := ExpandComments(value)
+		for _, comment := range comments {
+			switch comment[0] {
+			case "@embed":
+				{
+					data, err := os.ReadFile(path.Join(file.Dir, v.(string)))
+					if err != nil {
+						panic(err)
+					}
 
-				return ByteString(StringToGoByteArray(string(data)))
+					return ByteString(StringToGoByteArray(string(data)))
+				}
 			}
 		}
 	}
@@ -827,189 +712,6 @@ func getKind(fd protoreflect.FieldDescriptor) string {
 	}
 
 	return prefix + baseType
-}
-
-func marshalTags(fd protoreflect.FieldDescriptor) string {
-	var buf bytes.Buffer
-
-	buf.WriteString("protobuf:")
-	buf.WriteRune('"')
-	buf.WriteString(buildTagString(fd, false))
-	buf.WriteRune('"')
-
-	if fd.HasJSONName() {
-		buf.WriteString(` json:"`)
-		buf.WriteString(fd.JSONName())
-		buf.WriteRune('"')
-	}
-
-	if fd.IsMap() {
-		buf.WriteString(` protobuf_key:"`)
-		buf.WriteString(buildTagString(fd.MapKey(), true))
-		buf.WriteString(`" protobuf_val:"`)
-		buf.WriteString(buildTagString(fd.MapValue(), true))
-		buf.WriteRune('"')
-	}
-
-	return buf.String()
-}
-
-func buildTagString(fd protoreflect.FieldDescriptor, skipSyntax bool) string {
-	var tags []string
-
-	// Wire type
-	switch fd.Kind() {
-	case protoreflect.BoolKind, protoreflect.EnumKind,
-		protoreflect.Int32Kind, protoreflect.Uint32Kind,
-		protoreflect.Int64Kind, protoreflect.Uint64Kind:
-		tags = append(tags, "varint")
-	case protoreflect.Sint32Kind:
-		tags = append(tags, "zigzag32")
-	case protoreflect.Sint64Kind:
-		tags = append(tags, "zigzag64")
-	case protoreflect.Sfixed32Kind, protoreflect.Fixed32Kind, protoreflect.FloatKind:
-		tags = append(tags, "fixed32")
-	case protoreflect.Sfixed64Kind, protoreflect.Fixed64Kind, protoreflect.DoubleKind:
-		tags = append(tags, "fixed64")
-	case protoreflect.StringKind, protoreflect.BytesKind, protoreflect.MessageKind:
-		tags = append(tags, "bytes")
-	case protoreflect.GroupKind:
-		tags = append(tags, "group")
-	}
-
-	// Field number
-	tags = append(tags, strconv.Itoa(int(fd.Number())))
-
-	// Cardinality
-	switch fd.Cardinality() {
-	case protoreflect.Optional:
-		tags = append(tags, "opt")
-	case protoreflect.Required:
-		tags = append(tags, "req")
-	case protoreflect.Repeated:
-		tags = append(tags, "rep")
-	}
-
-	if fd.IsPacked() {
-		tags = append(tags, "packed")
-	}
-
-	// Name (group names need special handling)
-	name := string(fd.Name())
-	if fd.Kind() == protoreflect.GroupKind {
-		name = string(fd.Message().Name())
-	}
-	tags = append(tags, "name="+name)
-
-	// JSON name
-	if jsonName := fd.JSONName(); jsonName != "" && jsonName != name && !fd.IsExtension() {
-		tags = append(tags, "json="+jsonName)
-	}
-
-	// Proto3 syntax
-	if !skipSyntax && fd.Syntax() == protoreflect.Proto3 && !fd.IsExtension() {
-		tags = append(tags, "proto3")
-	}
-
-	// Enum type
-	if fd.Kind() == protoreflect.EnumKind {
-		tags = append(tags, "enum="+string(fd.Enum().FullName()))
-	}
-
-	// Oneof
-	if fd.ContainingOneof() != nil {
-		tags = append(tags, "oneof")
-	}
-
-	// Default value (must be last)
-	if fd.HasDefault() {
-		if def, err := marshalDefaultValue(fd.Default(), fd.DefaultEnumValue(), fd.Kind(), GoTag); err == nil {
-			tags = append(tags, "def="+def)
-		}
-	}
-
-	return strings.Join(tags, ",")
-}
-
-func marshalDefaultValue(v protoreflect.Value, ev protoreflect.EnumValueDescriptor, k protoreflect.Kind, f Format) (string, error) {
-	switch k {
-	case protoreflect.BoolKind:
-		if f == GoTag {
-			if v.Bool() {
-				return "1", nil
-			}
-			return "0", nil
-		}
-		return strconv.FormatBool(v.Bool()), nil
-
-	case protoreflect.EnumKind:
-		if f == GoTag {
-			return strconv.FormatInt(int64(v.Enum()), 10), nil
-		}
-		return string(ev.Name()), nil
-
-	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind,
-		protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
-		return strconv.FormatInt(v.Int(), 10), nil
-
-	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind,
-		protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
-		return strconv.FormatUint(v.Uint(), 10), nil
-
-	case protoreflect.FloatKind, protoreflect.DoubleKind:
-		f := v.Float()
-		switch {
-		case math.IsInf(f, -1):
-			return "-inf", nil
-		case math.IsInf(f, +1):
-			return "inf", nil
-		case math.IsNaN(f):
-			return "nan", nil
-		default:
-			bitSize := 64
-			if k == protoreflect.FloatKind {
-				bitSize = 32
-			}
-			return strconv.FormatFloat(f, 'g', -1, bitSize), nil
-		}
-
-	case protoreflect.StringKind:
-		return v.String(), nil
-
-	case protoreflect.BytesKind:
-		return marshalBytes(v.Bytes())
-	}
-
-	return "", fmt.Errorf("unsupported kind for default value: %v", k)
-}
-
-func marshalBytes(b []byte) (string, error) {
-	var buf bytes.Buffer
-
-	for _, c := range b {
-		switch c {
-		case '\n':
-			buf.WriteString(`\n`)
-		case '\r':
-			buf.WriteString(`\r`)
-		case '\t':
-			buf.WriteString(`\t`)
-		case '"':
-			buf.WriteString(`\"`)
-		case '\'':
-			buf.WriteString(`\'`)
-		case '\\':
-			buf.WriteString(`\\`)
-		default:
-			if c >= 0x20 && c <= 0x7e { // printable ASCII
-				buf.WriteByte(c)
-			} else {
-				fmt.Fprintf(&buf, `\%03o`, c)
-			}
-		}
-	}
-
-	return buf.String(), nil
 }
 
 func getReflectedKind(k protoreflect.Kind) reflect.Kind {
@@ -1078,4 +780,53 @@ func StringToGoByteArray(str string) string {
 	buffer.WriteString("\r\n")
 	buffer.WriteString("}")
 	return buffer.String()
+}
+
+func parseTemplates(t *template.Template, templates ...string) (*template.Template, error) {
+	if len(templates) == 0 {
+		return nil, fmt.Errorf("template: no files named in call to ParseFiles")
+	}
+	for _, i := range templates {
+		name := uuid.New().String()
+		var tmpl *template.Template
+		if t == nil {
+			t = template.New(name)
+		}
+		tmpl = t.New(name)
+
+		_, err := tmpl.Parse(i)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return t, nil
+}
+
+func ExpandComments(comment string) [][2]string {
+	lines := strings.FieldsFunc(comment, func(r rune) bool {
+		return r == '\r' || r == '\n'
+	})
+
+	out := make([][2]string, 0)
+
+	for _, line := range lines {
+		str := Trim(line)
+		segments := strings.Split(str, " ")
+		if len(segments) >= 1 {
+			continue
+		}
+		if strings.HasPrefix(segments[0], "@") {
+			out = append(out, [2]string{segments[0], strings.Join(segments[1:], " ")})
+		}
+	}
+	return out
+}
+
+func Trim(str string) string {
+	out := strings.TrimRightFunc(str, func(r rune) bool {
+		return r == ' ' || r == '\r'
+	})
+	out = strings.TrimLeft(out, " ")
+
+	return out
 }
