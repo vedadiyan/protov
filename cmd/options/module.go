@@ -39,12 +39,44 @@ var (
 	ErrProtoVHomeNotSet  = errors.New("protov environment variable not set")
 )
 
-// Config represents the module configuration
-type Config struct {
-	Modules []ModuleConfig `yaml:"modules"`
-}
+type (
+	ModuleConfig struct {
+		Name         string            `yaml:"name"`
+		Destination  string            `yaml:"destination"`
+		Mod          string            `yaml:"mod"`
+		GoVersion    string            `yaml:"go"`
+		ProtoFiles   []string          `yaml:"protos"`
+		Dependencies []string          `yaml:"dependencies"`
+		Replacements []string          `yaml:"replacements"`
+		MainTemplate []string          `yaml:"mainTemplate"`
+		BuildFlags   []string          `yaml:"buildFlags"`
+		Environment  map[string]string `yaml:"environment"`
+		Tests        []string          `yaml:"tests"`
+	}
+	Config struct {
+		Modules []ModuleConfig `yaml:"modules"`
+	}
+	Module struct {
+		Init      ModuleInit      `long:"init" help:"initializes a new module"`
+		Build     ModuleBuild     `long:"build" help:"builds the module into a standalone Go application"`
+		Dockerize ModuleDockerize `long:"dockerize" help:"containerizes the module"`
+		Help      bool            `long:"help" help:"shows help"`
+	}
+	ModuleInit struct {
+	}
+	ModuleBuild struct {
+		Source bool `long:"--source" help:"builds the module into Go source code"`
+		Help   bool `long:"help" help:"shows help"`
+	}
+	ModuleDockerize struct {
+		Tag      string  `long:"--tag" help:"image tag name"`
+		Builder  *string `long:"--builder" help:"specifies which tool to use to build the image"`
+		Platform *string `long:"--platform" help:"specifies the platform for which the image must be built"`
+		Buildx   bool    `long:"--buildx" help:"use buildx to build the image"`
+		Help     bool    `long:"help" help:"shows help"`
+	}
+)
 
-// Validate validates the entire configuration
 func (c *Config) Validate() error {
 	if len(c.Modules) == 0 {
 		return fmt.Errorf("%w: no modules defined", ErrInvalidConfig)
@@ -59,22 +91,6 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// ModuleConfig represents a single module configuration
-type ModuleConfig struct {
-	Name         string            `yaml:"name"`
-	Destination  string            `yaml:"destination"`
-	Mod          string            `yaml:"mod"`
-	GoVersion    string            `yaml:"go"`
-	ProtoFiles   []string          `yaml:"protos"`
-	Dependencies []string          `yaml:"dependencies"`
-	Replacements []string          `yaml:"replacements"`
-	MainTemplate []string          `yaml:"mainTemplate"`
-	BuildFlags   []string          `yaml:"buildFlags"`
-	Environment  map[string]string `yaml:"environment"`
-	Tests        []string          `yaml:"tests"`
-}
-
-// Validate validates the module configuration
 func (mc *ModuleConfig) Validate() error {
 	if mc.Name == "" {
 		return fmt.Errorf("%w: name is required", ErrInvalidConfig)
@@ -89,14 +105,12 @@ func (mc *ModuleConfig) Validate() error {
 		return fmt.Errorf("%w: go version is required", ErrInvalidConfig)
 	}
 
-	// Validate dependencies
 	for _, dep := range mc.Dependencies {
 		if _, err := ParseDependency(dep); err != nil {
 			return fmt.Errorf("invalid dependency %q: %w", dep, err)
 		}
 	}
 
-	// Validate replacements
 	for _, repl := range mc.Replacements {
 		if err := validateReplacement(repl); err != nil {
 			return fmt.Errorf("invalid replacement %q: %w", repl, err)
@@ -106,19 +120,6 @@ func (mc *ModuleConfig) Validate() error {
 	return nil
 }
 
-// Module handles module operations
-type Module struct {
-	Init      ModuleInit      `long:"init" help:"initializes a new module"`
-	Build     ModuleBuild     `long:"build" help:"builds the module into a standalone Go application"`
-	Dockerize ModuleDockerize `long:"dockerize" help:"containerizes the module"`
-	Help      bool            `long:"help" help:"shows help"`
-}
-
-// ModuleInit initializes a new module configuration
-type ModuleInit struct {
-}
-
-// Run executes the module initialization
 func (mi *ModuleInit) Run() error {
 	if _, err := os.Stat(ConfigFilename); err == nil {
 		return ErrConfigExists
@@ -144,7 +145,6 @@ func (mi *ModuleInit) Run() error {
 	return nil
 }
 
-// createDefaultConfig creates a default module configuration
 func (mi *ModuleInit) createDefaultConfig() *Config {
 	return &Config{
 		Modules: []ModuleConfig{
@@ -165,13 +165,6 @@ func (mi *ModuleInit) createDefaultConfig() *Config {
 	}
 }
 
-// ModuleBuild builds a module
-type ModuleBuild struct {
-	Source bool `long:"--source" help:"builds the module into Go source code"`
-	Help   bool `long:"help" help:"shows help"`
-}
-
-// Run executes the module build
 func (mb *ModuleBuild) Run() error {
 	if mb.Help {
 		flaggy.PrintHelp()
@@ -190,7 +183,6 @@ func (mb *ModuleBuild) Run() error {
 	return Build(config, mb.Source)
 }
 
-// loadConfig loads the module configuration
 func (mb *ModuleBuild) loadConfig() (*Config, error) {
 	data, err := ReadFile(ConfigFilename)
 	if err != nil {
@@ -208,16 +200,6 @@ func (mb *ModuleBuild) loadConfig() (*Config, error) {
 	return &config, nil
 }
 
-// ModuleDockerize containerizes a module
-type ModuleDockerize struct {
-	Tag      string  `long:"--tag" help:"image tag name"`
-	Builder  *string `long:"--builder" help:"specifies which tool to use to build the image"`
-	Platform *string `long:"--platform" help:"specifies the platform for which the image must be built"`
-	Buildx   bool    `long:"--buildx" help:"use buildx to build the image"`
-	Help     bool    `long:"help" help:"shows help"`
-}
-
-// Run executes the module dockerization
 func (md *ModuleDockerize) Run() error {
 	if md.Help {
 		flaggy.PrintHelp()
@@ -229,7 +211,6 @@ func (md *ModuleDockerize) Run() error {
 		return ErrNoTag
 	}
 
-	// Validate tag format
 	if strings.ContainsAny(md.Tag, " \t\n\r") {
 		return fmt.Errorf("invalid tag: contains whitespace")
 	}
@@ -250,7 +231,6 @@ func (md *ModuleDockerize) Run() error {
 	return md.dockerizeModules(config)
 }
 
-// loadConfig loads the module configuration
 func (md *ModuleDockerize) loadConfig() (*Config, error) {
 	data, err := ReadFile(ConfigFilename)
 	if err != nil {
@@ -268,7 +248,6 @@ func (md *ModuleDockerize) loadConfig() (*Config, error) {
 	return &config, nil
 }
 
-// dockerizeModules builds Docker images for all modules
 func (md *ModuleDockerize) dockerizeModules(config *Config) error {
 	builder := md.getBuilder()
 	buildxFlag := md.getBuildxFlag()
@@ -283,7 +262,6 @@ func (md *ModuleDockerize) dockerizeModules(config *Config) error {
 	return nil
 }
 
-// dockerizeModule builds a Docker image for a single module
 func (md *ModuleDockerize) dockerizeModule(module ModuleConfig, builder, buildxFlag, platform string) error {
 	dockerfilePath := filepath.Join(module.Destination, "Dockerfile")
 	if err := WriteFile(dockerfilePath, []byte(DockerfileTemplate), 0644); err != nil {
@@ -291,7 +269,7 @@ func (md *ModuleDockerize) dockerizeModule(module ModuleConfig, builder, buildxF
 	}
 
 	args := md.buildDockerArgs(buildxFlag, platform)
-	if err := Run(builder, module.Destination, args...); err != nil {
+	if err := Exec(builder, module.Destination, args...); err != nil {
 		return fmt.Errorf("docker build failed: %w", err)
 	}
 
@@ -302,7 +280,6 @@ func (md *ModuleDockerize) dockerizeModule(module ModuleConfig, builder, buildxF
 	return nil
 }
 
-// getBuilder returns the Docker builder to use
 func (md *ModuleDockerize) getBuilder() string {
 	if md.Builder != nil && *md.Builder != "" {
 		return *md.Builder
@@ -310,7 +287,6 @@ func (md *ModuleDockerize) getBuilder() string {
 	return "docker"
 }
 
-// getBuildxFlag returns the buildx flag if enabled
 func (md *ModuleDockerize) getBuildxFlag() string {
 	if md.Buildx {
 		return "buildx"
@@ -318,7 +294,6 @@ func (md *ModuleDockerize) getBuildxFlag() string {
 	return ""
 }
 
-// getPlatform returns the platform flag if specified
 func (md *ModuleDockerize) getPlatform() string {
 	if md.Platform != nil && *md.Platform != "" {
 		return "--platform=" + *md.Platform
@@ -326,7 +301,6 @@ func (md *ModuleDockerize) getPlatform() string {
 	return ""
 }
 
-// buildDockerArgs builds the Docker command arguments
 func (md *ModuleDockerize) buildDockerArgs(buildxFlag, platform string) []string {
 	args := []string{"build"}
 
@@ -347,7 +321,6 @@ func (md *ModuleDockerize) buildDockerArgs(buildxFlag, platform string) []string
 	return args
 }
 
-// Build builds all modules in the configuration
 func Build(config *Config, sourceOnly bool) error {
 	if config == nil {
 		return fmt.Errorf("%w: config is nil", ErrInvalidConfig)
@@ -362,7 +335,6 @@ func Build(config *Config, sourceOnly bool) error {
 	return nil
 }
 
-// buildModule builds a single module
 func buildModule(module ModuleConfig, sourceOnly bool) error {
 	if err := EnsureDirectory(module.Destination, 0755); err != nil {
 		return err
@@ -390,7 +362,6 @@ func buildModule(module ModuleConfig, sourceOnly bool) error {
 	return nil
 }
 
-// createGoMod creates a go.mod file for the module
 func createGoMod(module ModuleConfig) error {
 	mod := new(modfile.File)
 
@@ -423,7 +394,6 @@ func createGoMod(module ModuleConfig) error {
 	return WriteFile(modPath, modBytes, 0644)
 }
 
-// addDependency adds a dependency to the go.mod file
 func addDependency(mod *modfile.File, dep string) error {
 	parts, err := ParseDependency(dep)
 	if err != nil {
@@ -437,7 +407,6 @@ func addDependency(mod *modfile.File, dep string) error {
 	return nil
 }
 
-// addReplacement adds a replacement to the go.mod file
 func addReplacement(mod *modfile.File, repl string) error {
 	segments := strings.Split(repl, "=>")
 	if len(segments) != 2 {
@@ -461,7 +430,6 @@ func addReplacement(mod *modfile.File, repl string) error {
 	return nil
 }
 
-// compileProtoFiles compiles all proto files for a module
 func compileProtoFiles(module ModuleConfig) ([]*compiler.File, error) {
 	if len(module.ProtoFiles) == 0 {
 		return []*compiler.File{}, nil
@@ -489,7 +457,6 @@ func compileProtoFiles(module ModuleConfig) ([]*compiler.File, error) {
 	return allFiles, nil
 }
 
-// processCodeGeneration processes code generation for compiled files
 func processCodeGeneration(ast *compiler.AST, destination string) error {
 	for _, file := range ast.Files {
 		outputDir := filepath.Join(destination, file.FilePath)
@@ -500,7 +467,6 @@ func processCodeGeneration(ast *compiler.AST, destination string) error {
 	return nil
 }
 
-// generateMainFiles generates main entry point files from templates
 func generateMainFiles(module ModuleConfig, files []*compiler.File) error {
 	if len(module.MainTemplate) == 0 {
 		return nil
@@ -523,7 +489,6 @@ func generateMainFiles(module ModuleConfig, files []*compiler.File) error {
 	return nil
 }
 
-// buildBinary builds the Go binary for the module
 func buildBinary(module ModuleConfig) error {
 	tmpDir := os.TempDir()
 	tmpBinary := filepath.Join(tmpDir, uuid.New().String())
@@ -531,12 +496,11 @@ func buildBinary(module ModuleConfig) error {
 	buildArgs := []string{"build", "-o", tmpBinary, "./cmd/"}
 	buildArgs = append(buildArgs, module.BuildFlags...)
 
-	// Set environment variables
 	if err := setEnvironment(module.Environment); err != nil {
 		return err
 	}
 
-	if err := Run("go", module.Destination, buildArgs...); err != nil {
+	if err := Exec("go", module.Destination, buildArgs...); err != nil {
 		return fmt.Errorf("%w: %v", ErrBuildFailed, err)
 	}
 
@@ -547,7 +511,6 @@ func buildBinary(module ModuleConfig) error {
 	return nil
 }
 
-// setEnvironment sets environment variables for the build
 func setEnvironment(env map[string]string) error {
 	for key, value := range env {
 		if err := os.Setenv(key, value); err != nil {
@@ -557,7 +520,6 @@ func setEnvironment(env map[string]string) error {
 	return nil
 }
 
-// cleanupAndMoveBinary cleans up source files and moves the binary
 func cleanupAndMoveBinary(module ModuleConfig, tmpBinary string) error {
 	entries, err := os.ReadDir(module.Destination)
 	if err != nil {
@@ -578,7 +540,6 @@ func cleanupAndMoveBinary(module ModuleConfig, tmpBinary string) error {
 		return fmt.Errorf("failed to move binary: %w", err)
 	}
 
-	// Set executable permissions
 	if err := os.Chmod(finalPath, 0755); err != nil {
 		return fmt.Errorf("failed to set executable permissions: %w", err)
 	}
@@ -586,7 +547,6 @@ func cleanupAndMoveBinary(module ModuleConfig, tmpBinary string) error {
 	return nil
 }
 
-// getBinaryName returns the appropriate binary name based on OS
 func getBinaryName(goos string) string {
 	switch goos {
 	case "windows":
@@ -598,7 +558,6 @@ func getBinaryName(goos string) string {
 	}
 }
 
-// ParseDependency parses a dependency string into path and version
 func ParseDependency(dep string) ([2]string, error) {
 	dep = strings.TrimSpace(dep)
 	if dep == "" {
@@ -623,7 +582,6 @@ func ParseDependency(dep string) ([2]string, error) {
 	return [2]string{path, version}, nil
 }
 
-// validateReplacement validates a replacement string format
 func validateReplacement(repl string) error {
 	segments := strings.Split(repl, "=>")
 	if len(segments) != 2 {
@@ -641,7 +599,6 @@ func validateReplacement(repl string) error {
 	return nil
 }
 
-// ParseGoFile parses a Go file and returns the package name
 func ParseGoFile(code []byte) (string, error) {
 	if len(code) == 0 {
 		return "", errors.New("empty Go source code")

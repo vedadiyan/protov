@@ -35,9 +35,6 @@ var (
 	ErrInvalidExtension = errors.New("invalid file extension")
 )
 
-// FileValidator provides file validation utilities
-
-// ValidateFilePath validates a file path for security and correctness
 func ValidateFilePath(path string) error {
 	if path == "" {
 		return fmt.Errorf("%w: empty path", ErrInvalidPath)
@@ -65,7 +62,6 @@ func ValidateFilePath(path string) error {
 	return nil
 }
 
-// ValidateFileExists checks if a file exists and is accessible
 func ValidateFileExists(path string) error {
 	if err := ValidateFilePath(path); err != nil {
 		return err
@@ -90,7 +86,6 @@ func ValidateFileExists(path string) error {
 	return nil
 }
 
-// ValidateProtoFile validates that a file is a .proto file
 func ValidateProtoFile(path string) error {
 	if err := ValidateFileExists(path); err != nil {
 		return err
@@ -103,7 +98,6 @@ func ValidateProtoFile(path string) error {
 	return nil
 }
 
-// ValidateOutputPath validates an output directory path
 func ValidateOutputPath(path string) error {
 	if path == "" {
 		return fmt.Errorf("%w: empty output path", ErrInvalidPath)
@@ -119,7 +113,6 @@ func ValidateOutputPath(path string) error {
 		return fmt.Errorf("%w: path contains null byte", ErrInvalidPath)
 	}
 
-	// If directory exists, verify it's writable
 	if info, err := os.Stat(cleaned); err == nil {
 		if !info.IsDir() {
 			return fmt.Errorf("%w: path exists but is not a directory", ErrInvalidPath)
@@ -135,7 +128,6 @@ func ValidateOutputPath(path string) error {
 	return nil
 }
 
-// ReadFile reads a file safely with validation
 func ReadFile(path string) ([]byte, error) {
 	if err := ValidateFilePath(path); err != nil {
 		return nil, err
@@ -161,7 +153,6 @@ func ReadFile(path string) ([]byte, error) {
 	return data, nil
 }
 
-// WriteFile writes data to a file safely with validation
 func WriteFile(path string, data []byte, perm os.FileMode) error {
 	if len(data) == 0 {
 		return ErrEmptyData
@@ -178,7 +169,6 @@ func WriteFile(path string, data []byte, perm os.FileMode) error {
 	return nil
 }
 
-// EnsureDirectory creates a directory if it doesn't exist
 func EnsureDirectory(path string, perm os.FileMode) error {
 	if err := ValidateFilePath(path); err != nil {
 		return err
@@ -191,7 +181,6 @@ func EnsureDirectory(path string, perm os.FileMode) error {
 	return nil
 }
 
-// SanitizeFilename removes potentially dangerous characters from filenames
 func SanitizeFilename(name string) string {
 	name = strings.ReplaceAll(name, "/", "")
 	name = strings.ReplaceAll(name, "\\", "")
@@ -206,7 +195,6 @@ func SanitizeFilename(name string) string {
 	return name
 }
 
-// ReadTemplateFile reads a template file from absolute path or PROTOV_HOME
 func ReadTemplateFile(file string) ([]byte, error) {
 	cleaned := filepath.Clean(file)
 
@@ -226,8 +214,7 @@ func ReadTemplateFile(file string) ([]byte, error) {
 	return ReadFile(templatePath)
 }
 
-// Run executes a command with timeout and error handling
-func Run(name string, dir string, args ...string) error {
+func Exec(name string, dir string, args ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), CommandTimeout)
 	defer cancel()
 
@@ -247,26 +234,6 @@ func Run(name string, dir string, args ...string) error {
 	return nil
 }
 
-// RunWithOutput executes a command and returns its output
-func RunWithOutput(name string, dir string, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), CommandTimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Dir = dir
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return nil, fmt.Errorf("%w: %s", ErrCommandTimeout, name)
-		}
-		return nil, fmt.Errorf("command %q failed: %w\noutput: %s", name, err, string(output))
-	}
-
-	return output, nil
-}
-
-// CheckTool verifies that a tool is available in PATH
 func CheckTool(name string) error {
 	if _, err := exec.LookPath(name); err != nil {
 		return fmt.Errorf("%w: %s", ErrToolNotFound, name)
@@ -274,7 +241,6 @@ func CheckTool(name string) error {
 	return nil
 }
 
-// CheckTools verifies multiple tools are available
 func CheckTools(tools []string) error {
 	for _, tool := range tools {
 		if err := CheckTool(tool); err != nil {
@@ -284,24 +250,22 @@ func CheckTools(tools []string) error {
 	return nil
 }
 
-// Format formats a Go file using gofmt and goimports
 func Format(dir, fileName string) error {
 	if err := CheckTools([]string{"gofmt", "goimports"}); err != nil {
 		return err
 	}
 
-	if err := Run("gofmt", dir, "-w", fileName); err != nil {
+	if err := Exec("gofmt", dir, "-w", fileName); err != nil {
 		return fmt.Errorf("gofmt failed: %w", err)
 	}
 
-	if err := Run("goimports", dir, "-w", fileName); err != nil {
+	if err := Exec("goimports", dir, "-w", fileName); err != nil {
 		return fmt.Errorf("goimports failed: %w", err)
 	}
 
 	return nil
 }
 
-// CompileFile compiles a single proto file
 func CompileFile(protoPath, outputDir string) (*compiler.AST, error) {
 	if err := ValidateProtoFile(protoPath); err != nil {
 		return nil, fmt.Errorf("invalid proto file: %w", err)
@@ -329,7 +293,6 @@ func CompileFile(protoPath, outputDir string) (*compiler.AST, error) {
 	return ast, nil
 }
 
-// compileAndWriteFile compiles and writes a single file
 func compileAndWriteFile(file *compiler.File, outputDir string) error {
 	compiled, err := compiler.Compile(file)
 	if err != nil {
@@ -362,7 +325,6 @@ func compileAndWriteFile(file *compiler.File, outputDir string) error {
 	return nil
 }
 
-// ProcessTemplate processes a template file and generates output
 func ProcessTemplate(templatePath string, data interface{}, outputDir, outputName string) error {
 	templateData, err := ReadTemplateFile(templatePath)
 	if err != nil {
@@ -397,7 +359,6 @@ func ProcessTemplate(templatePath string, data interface{}, outputDir, outputNam
 		return err
 	}
 
-	// Format if it's a Go file
 	if strings.HasSuffix(fileName, ".go") {
 		if err := Format(outputDir, fileName); err != nil {
 			return fmt.Errorf("formatting error: %w", err)
@@ -407,7 +368,6 @@ func ProcessTemplate(templatePath string, data interface{}, outputDir, outputNam
 	return nil
 }
 
-// ProcessServiceCodeGeneration processes code generation for services
 func ProcessServiceCodeGeneration(file *compiler.File, ast *compiler.AST, outputDir string) error {
 	for _, srv := range file.Services {
 		for _, cg := range srv.CodeGeneration {

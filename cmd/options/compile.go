@@ -15,14 +15,12 @@ var (
 	ErrBatchFail = errors.New("batch compilation failed")
 )
 
-// Compile handles proto file compilation
 type Compile struct {
 	Files  []string `long:"--file" short:"-f" help:"a list of files to be compiled like: -f a.proto -f b.proto"`
 	Output string   `long:"--out" short:"-o" help:"output directory where the compiled files should be saved"`
 	Help   bool     `long:"help" help:"shows help"`
 }
 
-// Run executes the compilation process
 func (c *Compile) Run() error {
 	if c.Help {
 		flaggy.PrintHelp()
@@ -41,7 +39,6 @@ func (c *Compile) Run() error {
 	return c.compileFiles()
 }
 
-// validate performs input validation
 func (c *Compile) validate() error {
 	if len(c.Files) == 0 {
 		return ErrNoFiles
@@ -64,12 +61,10 @@ func (c *Compile) validate() error {
 	return nil
 }
 
-// checkPrerequisites verifies required tools are available
 func (c *Compile) checkPrerequisites() error {
 	return CheckTools([]string{"gofmt", "goimports"})
 }
 
-// compileFiles compiles all proto files
 func (c *Compile) compileFiles() error {
 	var errors []error
 
@@ -86,7 +81,6 @@ func (c *Compile) compileFiles() error {
 	return nil
 }
 
-// compileFile compiles a single proto file
 func (c *Compile) compileFile(protoPath string) error {
 	ast, err := CompileFile(protoPath, c.Output)
 	if err != nil {
@@ -96,7 +90,6 @@ func (c *Compile) compileFile(protoPath string) error {
 	return c.processCodeGeneration(ast)
 }
 
-// processCodeGeneration processes code generation for all files in the AST
 func (c *Compile) processCodeGeneration(ast *compiler.AST) error {
 	for _, file := range ast.Files {
 		outputDir := c.Output
