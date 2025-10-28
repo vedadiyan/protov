@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	flaggy "github.com/vedadiyan/flaggy/pkg"
-	"github.com/vedadiyan/protov/internal/system/protoc"
+	"github.com/vedadiyan/protov/internal/system/install"
 )
 
 var (
@@ -76,7 +76,7 @@ func (p *Proto) checkPrerequisites() error {
 }
 
 func (p *Proto) pullRepository() error {
-	protoPath, err := protoc.ProtoPath()
+	protoPath, err := install.ProtoPath()
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrProtoPathNotSet, err)
 	}
@@ -153,7 +153,7 @@ func (t *Template) checkPrerequisites() error {
 }
 
 func (t *Template) pullRepository() error {
-	protoPath, err := protoc.ProtoPath()
+	protoPath, err := install.ProtoPath()
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrProtoPathNotSet, err)
 	}

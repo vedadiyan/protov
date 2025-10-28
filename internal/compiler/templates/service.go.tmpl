@@ -21,7 +21,7 @@
   type {{$service.Name}}Server interface {
     Start({{$service.Name}}ServiceOptions) error
     Stop() error
-    Handle({{$service.Name}}HandlerOptions, func(context.Context, protolizer.Reflected)(protolizer.Reflected, error))
+    Handle({{$service.Name}}HandlerOptions, func(context.Context, []byte)([]byte, error))
   }
 
   type {{$service.Name}}Service interface {
@@ -59,8 +59,16 @@
           ServiceOptions: *Get{{$service.Name}}ServiceOptions(),
           RpcOptions:  *Get{{$service.Name}}{{$rpc.Name}}RpcOptions(),
         }
-        server.Handle({{$service.Name}}HandlerOptions, func(ctx context.Context, in protolizer.Reflected)(protolizer.Reflected, error) {
-          return service.{{$rpc.Name}}(ctx, in.(*{{$rpc.Input}}), {{$service.Name}}HandlerOptions.RpcOptions)
+        server.Handle({{$service.Name}}HandlerOptions, func(ctx context.Context, in []byte)([]byte, error) {
+          var req {{$rpc.Input}}
+          if err := protolizer.FastUnmarshal(in, &req); err != nil {
+            return nil, err
+          }
+          res, err := service.{{$rpc.Name}}(ctx, &req, {{$service.Name}}HandlerOptions.RpcOptions)
+          if err != nil {
+            return nil, err
+          }
+          return protolizer.FastMarshal(res)
         })
       {{- end }}
   }

@@ -1,4 +1,4 @@
-package protoc
+package install
 
 import (
 	"bytes"

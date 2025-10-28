@@ -14,7 +14,7 @@ import (
 	"github.com/bufbuild/protocompile/linker"
 	"github.com/bufbuild/protocompile/parser"
 	"github.com/bufbuild/protocompile/reporter"
-	"github.com/vedadiyan/protov/internal/system/protoc"
+	"github.com/vedadiyan/protov/internal/system/install"
 	"go.lsp.dev/protocol"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -134,7 +134,7 @@ func (r *Resolver) accessor(f string) (io.ReadCloser, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		// Fallback to standard protoc include directory
-		protoPath, err := protoc.ProtoPath()
+		protoPath, err := install.ProtoPath()
 		if err != nil {
 			return nil, err
 		}

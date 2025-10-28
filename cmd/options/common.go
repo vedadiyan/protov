@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/vedadiyan/protov/internal/compiler"
-	"github.com/vedadiyan/protov/internal/system/protoc"
+	"github.com/vedadiyan/protov/internal/system/install"
 )
 
 const (
@@ -202,7 +202,7 @@ func ReadTemplateFile(file string) ([]byte, error) {
 		return ReadFile(cleaned)
 	}
 
-	basePath, err := protoc.ProtoPath()
+	basePath, err := install.ProtoPath()
 	if err != nil {
 		return nil, err
 	}
