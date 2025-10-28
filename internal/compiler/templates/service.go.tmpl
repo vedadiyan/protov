@@ -71,7 +71,7 @@
           if err := protolizer.FastUnmarshal(in.Data, &req); err != nil {
             return nil, err
           }
-          res, err := service.{{$rpc.Name}}(ctx, &{{$service.Name}}Transport[*{{$rpc.Input}}] {&req, nil} , {{$service.Name}}HandlerOptions.RpcOptions)
+          res, err := service.{{$rpc.Name}}(ctx, &{{$service.Name}}Transport[*{{$rpc.Input}}] {&req, in.Headers} , {{$service.Name}}HandlerOptions.RpcOptions)
           if err != nil {
             return nil, err
           }
@@ -79,7 +79,7 @@
           if err != nil {
             return nil, err
           }
-          return &{{$service.Name}}Transport[[]byte] {out, nil}, nil
+          return &{{$service.Name}}Transport[[]byte] {out, res.Headers}, nil
         })
       {{- end }}
   }
