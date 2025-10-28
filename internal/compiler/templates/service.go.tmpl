@@ -1,5 +1,12 @@
 {{- define "Service"}}
 {{- range $service := .Services }}
+  type {{$service.Name}}Headers = map[string][]string
+
+  type {{$service.Name}}Transport[T any] = struct {
+    Data T
+    Headers {{$service.Name}}Headers
+  }
+
   type {{$service.Name}}ServiceOptions struct {
     Options struct {
       {{- template "parseMap" $service.Options }}
@@ -21,12 +28,12 @@
   type {{$service.Name}}Server interface {
     Start({{$service.Name}}ServiceOptions) error
     Stop() error
-    Handle({{$service.Name}}HandlerOptions, func(context.Context, []byte)([]byte, error))
+    Handle({{$service.Name}}HandlerOptions, func(context.Context, *{{$service.Name}}Transport[[]byte])(*{{$service.Name}}Transport[[]byte], error))
   }
 
   type {{$service.Name}}Service interface {
       {{- range $rpc := $service.Rpcs}}
-      {{$rpc.Name}}(context.Context, *{{$rpc.Input}}, {{$service.Name}}RpcOptions) (*{{$rpc.Output}}, error)
+      {{$rpc.Name}}(context.Context, *{{$service.Name}}Transport[*{{$rpc.Input}}], {{$service.Name}}RpcOptions) (*{{$service.Name}}Transport[*{{$rpc.Output}}], error)
       {{- end }}
   }        
 
@@ -59,16 +66,20 @@
           ServiceOptions: *Get{{$service.Name}}ServiceOptions(),
           RpcOptions:  *Get{{$service.Name}}{{$rpc.Name}}RpcOptions(),
         }
-        server.Handle({{$service.Name}}HandlerOptions, func(ctx context.Context, in []byte)([]byte, error) {
+        server.Handle({{$service.Name}}HandlerOptions, func(ctx context.Context, in *{{$service.Name}}Transport[[]byte])(*{{$service.Name}}Transport[[]byte], error) {
           var req {{$rpc.Input}}
-          if err := protolizer.FastUnmarshal(in, &req); err != nil {
+          if err := protolizer.FastUnmarshal(in.Data, &req); err != nil {
             return nil, err
           }
-          res, err := service.{{$rpc.Name}}(ctx, &req, {{$service.Name}}HandlerOptions.RpcOptions)
+          res, err := service.{{$rpc.Name}}(ctx, &{{$service.Name}}Transport[*{{$rpc.Input}}] {&req, nil} , {{$service.Name}}HandlerOptions.RpcOptions)
           if err != nil {
             return nil, err
           }
-          return protolizer.FastMarshal(res)
+          out, err := protolizer.FastMarshal(res.Data)
+          if err != nil {
+            return nil, err
+          }
+          return &{{$service.Name}}Transport[[]byte] {out, nil}, nil
         })
       {{- end }}
   }

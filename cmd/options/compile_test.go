@@ -23,8 +23,8 @@ func TestCompile_Run(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// TODO: construct the receiver type.
 			var c options.Compile
-			c.Files = []string{`C:\Users\Pouya\Desktop\lab\users\service.proto`}
-			c.Output = `C:\Users\Pouya\Desktop\lab\users\`
+			c.Files = []string{`C:\Users\Pouya\Desktop\New folder\users\service.proto`}
+			c.Output = `C:\Users\Pouya\Desktop\New folder\users\`
 			gotErr := c.Run()
 			if gotErr != nil {
 				if !tt.wantErr {
