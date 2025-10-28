@@ -38,6 +38,11 @@ type (
 	}
 )
 
+func (p *Pull) Run() error {
+	flaggy.PrintHelp()
+	return nil
+}
+
 func (p *Proto) Run() error {
 	if p.Help {
 		flaggy.PrintHelp()
