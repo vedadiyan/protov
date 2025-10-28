@@ -803,7 +803,7 @@ func ExpandComments(comment string) [][2]string {
 	for _, line := range lines {
 		str := Trim(line)
 		segments := strings.Split(str, " ")
-		if len(segments) >= 1 {
+		if len(segments) <= 1 {
 			continue
 		}
 		if strings.HasPrefix(segments[0], "@") {

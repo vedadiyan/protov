@@ -288,6 +288,7 @@ func CompileFile(protoPath, outputDir string) (*compiler.AST, error) {
 		if err := compileAndWriteFile(file, outputDir); err != nil {
 			return nil, fmt.Errorf("compilation error for %q: %w", file.FileName, err)
 		}
+
 	}
 
 	return ast, nil
@@ -371,10 +372,14 @@ func ProcessTemplate(templatePath string, data interface{}, outputDir, outputNam
 func ProcessServiceCodeGeneration(file *compiler.File, ast *compiler.AST, outputDir string) error {
 	for _, srv := range file.Services {
 		for _, cg := range srv.CodeGeneration {
-			baseName := filepath.Base(cg)
+			baseName := fmt.Sprintf("%s.%s", strings.ToLower(srv.Name), filepath.Base(cg))
 			outputName := strings.TrimSuffix(baseName, filepath.Ext(baseName))
 
-			if err := ProcessTemplate(cg, ast, outputDir, outputName); err != nil {
+			if err := ProcessTemplate(cg, struct {
+				Source      string
+				PackageName string
+				Service     *compiler.Service
+			}{file.Source, file.PackageName, srv}, outputDir, outputName); err != nil {
 				return fmt.Errorf("failed to process template %q: %w", cg, err)
 			}
 		}
