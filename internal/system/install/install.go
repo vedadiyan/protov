@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/vedadiyan/protov/internal/system/common"
-	"golang.org/x/sys/windows/registry"
 )
 
 func ProtoPath() (string, error) {
@@ -28,21 +27,10 @@ func ProtoPath() (string, error) {
 
 func exportEnv(protoPath string) error {
 	if common.GetOS() == common.OS_WINDOWS {
-		val, err := registry.OpenKey(registry.CURRENT_USER, "Environment", registry.QWORD)
+		err := EnsureInUserPath(protoPath)
 		if err != nil {
 			return err
 		}
-		v, _, err := val.GetStringValue("Path")
-		if err != nil {
-			return err
-		}
-		if strings.Contains(v, protoPath) {
-			return nil
-		}
-		if err := val.SetStringValue("Path", fmt.Sprintf("%s;%s", v, protoPath)); err != nil {
-			return err
-		}
-		return nil
 	}
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
