@@ -162,16 +162,8 @@ for {
         read()
     }
     i++
-    data, err := pdk.BytesDecode(buffer)
-    if err != nil {
-        return err
-    }
-    bytes := memory.Alloc(0)
     value := new({{.BaseType}})
-    bytes.Write(data)
-    err = protolizer.StaticCodec().Unmarshal(data, value)
-    memory.Dealloc(bytes)
-    if err != nil {
+    if err := protolizer.StaticCodec().UnmarshalFromBuffer(value, buffer); err != nil {
         return nil
     }
     x.{{.Name}} = append(x.{{.Name}}, *value)

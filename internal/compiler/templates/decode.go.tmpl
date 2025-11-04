@@ -97,12 +97,7 @@ return nil
 
 {{- define "DecodeMessage"}}
 value := new({{.BaseType}})
-bytes, err := pdk.BytesDecode(buffer)
-if err != nil {
-    return err
-}
-err = protolizer.StaticCodec().Unmarshal(bytes, value)
-if err != nil {
+if err := protolizer.StaticCodec().UnmarshalFromBuffer(value, buffer); err != nil {
     return err
 }     
 x.{{.Name}} = {{- if eq .Optional true}}&{{end}}value    

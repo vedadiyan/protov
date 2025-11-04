@@ -112,13 +112,8 @@ return nil
             return err
         }  
     {{- else if eq .Index 25}}
-        data, err := pdk.BytesDecode(innerBuffer)
-        if err != nil {
-            return err
-        }
         value := new({{.BaseType}})
-        err = protolizer.StaticCodec().Unmarshal(data, value)
-        if err != nil {
+        if err := protolizer.StaticCodec().UnmarshalFromBuffer(value, innerBuffer); err != nil {
             return err
         }  
     {{- else}}
