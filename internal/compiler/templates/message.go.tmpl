@@ -13,17 +13,17 @@ type {{.Name}} struct {
 {{- end}}
 
 {{- define "MessageMethods"}}
-func (x *{{.Name}}) New() protolizer.Reflected {
+func (x *{{.Name}}) New() codecs.Reflected {
     return new({{.Name}})
 }
 
-func (x *{{.Name}}) Type() protolizer.Type {
-    return *protolizer.CaptureTypeByName("{{.TypeName}}")
+func (x *{{.Name}}) Type() metadata.Type {
+    return *metadata.CaptureTypeByName("{{.TypeName}}")
 }
 {{- end}}
 
 {{- define "Init"}}
 func init() {
-    protolizer.RegisterTypeAs[{{.Name}}]("{{.TypeName}}")
+    metadata.RegisterTypeAs[{{.Name}}]("{{.TypeName}}")
 }
 {{- end}}

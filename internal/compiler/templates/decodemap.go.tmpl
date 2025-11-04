@@ -3,7 +3,7 @@ x.Metadata = make(map[string]string)
 i := 0
 for {
     if i != 0 {
-        i, _, read, err := protolizer.TagPeek(buffer)
+        i, _, read, err := pdk.TagPeek(buffer)
         if err != nil {
             if err == io.EOF {
                 return nil
@@ -16,62 +16,62 @@ for {
         read()
     }
     i++
-    bytes, err := protolizer.BytesDecode(buffer)
+    bytes, err := pdk.BytesDecode(buffer)
     if err != nil {
         return nil
     }
-    innerBuffer := protolizer.Alloc(0)
+    innerBuffer := memory.Alloc(0)
     innerBuffer.Write(bytes)
-    _, _, err = protolizer.TagDecode(innerBuffer)
+    _, _, err = pdk.TagDecode(innerBuffer)
     if err != nil {
-        protolizer.Dealloc(innerBuffer)
+        memory.Dealloc(innerBuffer)
         return err
     }
 
     {{template "DecodeMapKey" .}}
     
-    _, _, err = protolizer.TagDecode(innerBuffer)
+    _, _, err = pdk.TagDecode(innerBuffer)
     if err != nil {
-        protolizer.Dealloc(innerBuffer)
+        memory.Dealloc(innerBuffer)
         return err
     }
 
     {{template "DecodeMapValue" .}}
     
     x.{{.Name}}[{{.KeyBaseType}}(key)] = {{.IndexBaseType}}(value)
-    protolizer.Dealloc(innerBuffer)
+    memory.Dealloc(innerBuffer)
 }
 return nil
 {{- end}}
 
 {{- define "DecodeMapKey"}}
     {{- if eq .Key 1}}
-        key, err := protolizer.BooleanDecoder(field, innerBuffer)
+        key, err := pdk.BoolDecode(innerBuffer)
         if err != nil {
             return err
         }
     {{- else if or (eq .Key 2) (eq .Key 3) (eq .Key 4) (eq .Key 5) (eq .Key 6)}}
-        key, err := protolizer.SignedNumberDecoder(field, innerBuffer)
+        key, err := pdk.SignedNumberDecoder(field.Tags.Protobuf.WireType, innerBuffer)
         if err != nil {
             return err
         }
     {{- else if or (eq .Key 7) (eq .Key 8) (eq .Key 9) (eq .Key 10) (eq .Key 11)}}
-        key, err := protolizer.UnsignedNumberDecoder(field, innerBuffer)
+        key, err := pdk.UnsignedNumberDecoder(field.Tags.Protobuf.WireType, innerBuffer)
         if err != nil {
             return err
         }
     {{- else if eq .Key 13}}
-        key, err := protolizer.FloatDecoder(field, innerBuffer)
+        key, err := pdk.Float32Decode(innerBuffer)
         if err != nil {
             return err
         }    
     {{- else if eq .Key 14}}
-        key, err := protolizer.DoubleDecoder(field, innerBuffer)
+        key, err := pdk.Float64Decoder(innerBuffer)
         if err != nil {
             return err
         }     
     {{- else if eq .Key 24}}
-        key, err := protolizer.StringDecoder(field, innerBuffer)
+        key, err := pdk.StringDecode(innerBuffer)
         if err != nil {
             return err
         }            
@@ -82,42 +82,42 @@ return nil
 
 {{- define "DecodeMapValue"}}
     {{- if eq .Index 1}}
-        value, err := protolizer.BooleanDecoder(field, innerBuffer)
+        value, err := pdk.BoolDecode(innerBuffer)
         if err != nil {
             return err
         }
     {{- else if or (eq .Index 2) (eq .Index 3) (eq .Index 4) (eq .Index 5) (eq .Index 6)}}
-        value, err := protolizer.SignedNumberDecoder(field, innerBuffer)
+        value, err := pdk.SignedNumberDecoder(field.Tags.Protobuf.WireType, innerBuffer)
         if err != nil {
             return err
         }
     {{- else if or (eq .Index 7) (eq .Index 8) (eq .Index 9) (eq .Index 10) (eq .Index 11)}}
-        value, err := protolizer.UnsignedNumberDecoder(field, innerBuffer)
+        value, err := pdk.UnsignedNumberDecoder(field.Tags.Protobuf.WireType, innerBuffer)
         if err != nil {
             return err
         }
     {{- else if eq .Index 13}}
-        value, err := protolizer.FloatDecoder(field, innerBuffer)
+        value, err := pdk.Float32Decode(innerBuffer)
         if err != nil {
             return err
         }    
     {{- else if eq .Index 14}}
-        value, err := protolizer.DoubleDecoder(field, innerBuffer)
+        value, err := pdk.Float64Decode(innerBuffer)
         if err != nil {
             return err
         }     
     {{- else if eq .Index 24}}
-        value, err := protolizer.StringDecoder(field, innerBuffer)
+        value, err := pdk.StringDecode(innerBuffer)
         if err != nil {
             return err
         }  
     {{- else if eq .Index 25}}
-        data, err := protolizer.BytesDecode(innerBuffer)
+        data, err := pdk.BytesDecode(innerBuffer)
         if err != nil {
             return err
         }
         value := new({{.BaseType}})
-        err = protolizer.FastUnmarshal(data, value)
+        err = protolizer.StaticCodec().Unmarshal(data, value)
         if err != nil {
             return err
         }  

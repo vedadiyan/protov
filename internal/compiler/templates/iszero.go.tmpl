@@ -1,5 +1,5 @@
 {{- define "IsZeroMethod"}}
-func (x *{{.Name}}) IsZero(field *protolizer.Field) bool {
+func (x *{{.Name}}) IsZero(field *metadata.Field) bool {
     switch field.Tags.Protobuf.FieldNum {
         {{- range $field := .Fields}}
             case {{ $field.FieldNum }}: {

@@ -21,7 +21,7 @@
 {{- end}}
 
 {{- define "DecodeBytes"}}
-bytes, err := protolizer.BytesDecode(buffer)
+bytes, err := pdk.BytesDecode(buffer)
 if err != nil {
     return err
 }
@@ -30,15 +30,15 @@ return nil
 {{- end}}
 
 {{- define "DecodeRepeatedBool"}}
-bytes, err := protolizer.BytesDecode(buffer)
+bytes, err := pdk.BytesDecode(buffer)
 if err != nil {
     return err
 }
-innerBuffer := protolizer.Alloc(0)
+innerBuffer := memory.Alloc(0)
 innerBuffer.Write(bytes)
-defer protolizer.Dealloc(innerBuffer)
+defer memory.Dealloc(innerBuffer)
 for innerBuffer.Len() != 0 {
-    value, err := protolizer.BooleanDecoder(field, innerBuffer)
+    value, err := pdk.BoolDecode(innerBuffer)
     if err != nil {
         return err
     }
@@ -48,15 +48,15 @@ return nil
 {{- end}}
 
 {{- define "DecodeRepeatedSigned"}}
-bytes, err := protolizer.BytesDecode(buffer)
+bytes, err := pdk.BytesDecode(buffer)
 if err != nil {
     return err
 }
-innerBuffer := protolizer.Alloc(0)
+innerBuffer := memory.Alloc(0)
 innerBuffer.Write(bytes)
-defer protolizer.Dealloc(innerBuffer)
+defer memory.Dealloc(innerBuffer)
 for innerBuffer.Len() != 0 {
-    value, err := protolizer.SignedNumberDecoder(field, innerBuffer)
+    value, err := pdk.SignedNumberDecoder(field.Tags.Protobuf.WireType, innerBuffer)
     if err != nil {
         return err
     }
@@ -66,15 +66,15 @@ return nil
 {{- end}}
 
 {{- define "DecodeRepeatedUnsigned"}}
-bytes, err := protolizer.BytesDecode(buffer)
+bytes, err := pdk.BytesDecode(buffer)
 if err != nil {
     return err
 }
-innerBuffer := protolizer.Alloc(0)
+innerBuffer := memory.Alloc(0)
 innerBuffer.Write(bytes)
-defer protolizer.Dealloc(innerBuffer)
+defer memory.Dealloc(innerBuffer)
 for innerBuffer.Len() != 0 {
-    value, err := protolizer.UnsignedNumberDecoder(field, innerBuffer)
+    value, err := pdk.UnsignedNumberDecoder(field.Tags.Protobuf.WireType, innerBuffer)
     if err != nil {
         return err
     }
@@ -84,15 +84,15 @@ return nil
 {{- end}}
 
 {{- define "DecodeRepeatedFloat32"}}
-bytes, err := protolizer.BytesDecode(buffer)
+bytes, err := pdk.BytesDecode(buffer)
 if err != nil {
     return err
 }
-innerBuffer := protolizer.Alloc(0)
+innerBuffer := memory.Alloc(0)
 innerBuffer.Write(bytes)
-defer protolizer.Dealloc(innerBuffer)
+defer memory.Dealloc(innerBuffer)
 for innerBuffer.Len() != 0 {
-    value, err := protolizer.FloatDecoder(field, innerBuffer)
+    value, err := pdk.Float32Decode(innerBuffer)
     if err != nil {
         return err
     }
@@ -102,15 +102,15 @@ return nil
 {{- end}}
 
 {{- define "DecodeRepeatedFloat64"}}
-bytes, err := protolizer.BytesDecode(buffer)
+bytes, err := pdk.BytesDecode(buffer)
 if err != nil {
     return err
 }
-innerBuffer := protolizer.Alloc(0)
+innerBuffer := memory.Alloc(0)
 innerBuffer.Write(bytes)
-defer protolizer.Dealloc(innerBuffer)
+defer memory.Dealloc(innerBuffer)
 for innerBuffer.Len() != 0 {
-    value, err := protolizer.DoubleDecoder(field, innerBuffer)
+    value, err := pdk.Float64Decode(innerBuffer)
     if err != nil {
         return err
     }
@@ -123,7 +123,7 @@ return nil
 i := 0
 for {
     if i != 0 {
-        i, _, read, err := protolizer.TagPeek(buffer)
+        i, _, read, err := pdk.TagPeek(buffer)
         if err != nil {
             if err == io.EOF {
                 return nil
@@ -136,7 +136,7 @@ for {
         read()
     }
     i++
-    value, err := protolizer.StringDecode(buffer)
+    value, err := pdk.StringDecode(buffer)
     if err != nil {
         return nil
     }
@@ -149,7 +149,7 @@ return nil
 i := 0
 for {
     if i != 0 {
-        i, _, read, err := protolizer.TagPeek(buffer)
+        i, _, read, err := pdk.TagPeek(buffer)
         if err != nil {
             if err == io.EOF {
                 return nil
@@ -162,15 +162,15 @@ for {
         read()
     }
     i++
-    data, err := protolizer.BytesDecode(buffer)
+    data, err := pdk.BytesDecode(buffer)
     if err != nil {
         return err
     }
-    bytes := protolizer.Alloc(0)
+    bytes := memory.Alloc(0)
     value := new({{.BaseType}})
     bytes.Write(data)
-    err = protolizer.FastUnmarshal(data, value)
-    protolizer.Dealloc(bytes)
+    err = protolizer.StaticCodec().Unmarshal(data, value)
+    memory.Dealloc(bytes)
     if err != nil {
         return nil
     }

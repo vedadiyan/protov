@@ -68,14 +68,14 @@
         }
         if err := server.Handle({{$service.Name}}HandlerOptions, func(ctx context.Context, in *{{$service.Name}}Transport[[]byte])(*{{$service.Name}}Transport[[]byte], error) {
           var req {{$rpc.Input}}
-          if err := protolizer.FastUnmarshal(in.Data, &req); err != nil {
+          if err := protolizer.StaticCodec().Unmarshal(in.Data, &req); err != nil {
             return nil, err
           }
           res, err := service.{{$rpc.Name}}(ctx, &{{$service.Name}}Transport[*{{$rpc.Input}}] {&req, in.Headers} , {{$service.Name}}HandlerOptions.RpcOptions)
           if err != nil {
             return nil, err
           }
-          out, err := protolizer.FastMarshal(res.Data)
+          out, err := protolizer.StaticCodec().Marshal(res.Data)
           if err != nil {
             return nil, err
           }
