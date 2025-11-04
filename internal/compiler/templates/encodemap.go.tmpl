@@ -16,7 +16,7 @@ for key, value := range x.{{.Name}} {
     innerBuffer.Write(field.ValueTag)
     {{template "EncodeMapValue" .}}
 
-    bytes := psk.BufferEncode(innerBuffer)
+    bytes := pdk.BufferEncode(innerBuffer)
     bytes.WriteTo(buffer)
     memory.Dealloc(innerBuffer)
     memory.Dealloc(bytes)
