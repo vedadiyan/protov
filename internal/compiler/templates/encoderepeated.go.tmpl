@@ -21,8 +21,8 @@
 {{- end}}
 
 {{- define "EncodeBytes"}}
-data, err := protolizer.EncodeBytes(int64({{if eq .Optional true}}*{{end}}x.{{.Name}}), field)
-defer protolizer.Dealloc(data)
+data, err := pdk.EncodeBytes(int64({{if eq .Optional true}}*{{end}}x.{{.Name}}), field.Tags.Protobuf.WireType)
+defer memory.Dealloc(data)
 if err != nil {
     return err
 }
@@ -31,68 +31,68 @@ return nil
 {{- end}}
 
 {{- define "EncodeRepeatedBool"}}
-innerBuffer := protolizer.Alloc(0)
-defer protolizer.Dealloc(innerBuffer)
+innerBuffer := memory.Alloc(0)
+defer memory.Dealloc(innerBuffer)
 for _, value := range x.{{.Name}} {
-    protolizer.BoolInlineEncode(value, innerBuffer)
+    pdk.BoolInlineEncode(value, innerBuffer)
 }
-bytes := protolizer.BufferEncode(innerBuffer)
+bytes := pdk.BufferEncode(innerBuffer)
 bytes.WriteTo(buffer)
-protolizer.Dealloc(bytes)
+memory.Dealloc(bytes)
 return nil
 {{- end}}
 
 {{- define "EncodeRepeatedSigned"}}
-innerBuffer := protolizer.Alloc(0)
-defer protolizer.Dealloc(innerBuffer)
+innerBuffer := memory.Alloc(0)
+defer memory.Dealloc(innerBuffer)
 for _, value := range x.{{.Name}} {
-    protolizer.SignedNumberInlineEncoder(int64(value), field, innerBuffer)
+    pdk.SignedNumberInlineEncoder(int64(value), field.Tags.Protobuf.WireType, innerBuffer)
 }
-bytes := protolizer.BufferEncode(innerBuffer)
+bytes := pdk.BufferEncode(innerBuffer)
 bytes.WriteTo(buffer)
-protolizer.Dealloc(bytes)
+memory.Dealloc(bytes)
 return nil
 {{- end}}
 
 {{- define "EncodeRepeatedUnsigned"}}
-innerBuffer := protolizer.Alloc(0)
-defer protolizer.Dealloc(innerBuffer)
+innerBuffer := memory.Alloc(0)
+defer memory.Dealloc(innerBuffer)
 for _, value := range x.{{.Name}} {
-    protolizer.UnsignedNumberInlineEncoder(uint64(value), field, innerBuffer)
+    pdk.UnsignedNumberInlineEncoder(uint64(value), ffield.Tags.Protobuf.WireTypeield, innerBuffer)
 }
-bytes := protolizer.BufferEncode(innerBuffer)
+bytes := pdk.BufferEncode(innerBuffer)
 bytes.WriteTo(buffer)
-protolizer.Dealloc(bytes)
+memory.Dealloc(bytes)
 return nil
 {{- end}}
 
 {{- define "EncodeRepeatedFloat32"}}
-innerBuffer := protolizer.Alloc(0)
-defer protolizer.Dealloc(innerBuffer)
+innerBuffer := memory.Alloc(0)
+defer memory.Dealloc(innerBuffer)
 for _, value := range x.{{.Name}} {
-    protolizer.Float32InlineEncode(value, innerBuffer)
+    pdk.Float32InlineEncode(value, innerBuffer)
 }
-bytes := protolizer.BufferEncode(innerBuffer)
+bytes := pdk.BufferEncode(innerBuffer)
 bytes.WriteTo(buffer)
-protolizer.Dealloc(bytes)
+pdk.Dealloc(bytes)
 return nil
 {{- end}}
 
 {{- define "EncodeRepeatedFloat64"}}
-innerBuffer := protolizer.Alloc(0)
-defer protolizer.Dealloc(innerBuffer)
+innerBuffer := memory.Alloc(0)
+defer memory.Dealloc(innerBuffer)
 for _, value := range x.{{.Name}} {
-    protolizer.Float64InlineEncode(value, innerBuffer)
+    pdk.Float64InlineEncode(value, innerBuffer)
 }
-bytes := protolizer.BufferEncode(innerBuffer)
+bytes := pdk.BufferEncode(innerBuffer)
 bytes.WriteTo(buffer)
-protolizer.Dealloc(bytes)
+memory.Dealloc(bytes)
 return nil
 {{- end}}
 
 {{- define "EncodeRepeatedString"}}
-tag, err := protolizer.TagEncode(int32(field.Tags.Protobuf.FieldNum), protolizer.WireTypeLen)
-defer protolizer.Dealloc(tag)
+tag, err := pdk.TagEncode(int32(field.Tags.Protobuf.FieldNum), pdk.WireTypeLen)
+defer memory.Dealloc(tag)
 if err != nil {
     return err
 }
@@ -100,14 +100,14 @@ for i, x := range x.{{.Name}} {
     if i != 0 {
         buffer.Write(tag.Bytes())
     }
-    protolizer.StringInlineEncode(x, buffer)
+    pdk.StringInlineEncode(x, buffer)
 }
 return nil
 {{- end}}
 
 {{- define "EncodeRepeatedMessage"}}
-tag, err := protolizer.TagEncode(int32(field.Tags.Protobuf.FieldNum), protolizer.WireTypeLen)
-defer protolizer.Dealloc(tag)
+tag, err := pdk.TagEncode(int32(field.Tags.Protobuf.FieldNum), pdk.WireTypeLen)
+defer memory.Dealloc(tag)
 if err != nil {
     return err
 }
@@ -115,14 +115,14 @@ for i, value := range x.{{.Name}} {
     if i != 0 {
         buffer.Write(tag.Bytes())
     }
-    data, err := protolizer.FastInlineMarshal(&value)
+    data, err := protolizer.StaticCodec().InlineMarshal(&value)
     if err != nil {
         return err
     }
-    bytes := protolizer.BufferEncode(data)
+    bytes := pdk.BufferEncode(data)
     bytes.WriteTo(buffer)
-    protolizer.Dealloc(data)
-    protolizer.Dealloc(bytes)
+    memory.Dealloc(data)
+    memory.Dealloc(bytes)
 }
 return nil
 {{- end}}

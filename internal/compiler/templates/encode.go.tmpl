@@ -1,5 +1,5 @@
 {{- define "EncodeMethod"}}
-func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error {
+func (x *{{.Name}}) Encode(field *metadata.Field, buffer *bytes.Buffer) error {
     switch field.Tags.Protobuf.FieldNum {
         {{- range $field := .Fields}}
             case {{ $field.FieldNum }}: {
@@ -43,44 +43,44 @@ func (x *{{.Name}}) Encode(field *protolizer.Field, buffer *bytes.Buffer) error 
 {{- end}}
 
 {{- define "EncodeBool"}}
-protolizer.BoolInlineEncode({{if eq .Optional true}}*{{end}}x.{{.Name}}, buffer)
+pdk.BoolInlineEncode({{if eq .Optional true}}*{{end}}x.{{.Name}}, buffer)
 return nil
 {{- end}}
 
 {{- define "EncodeSignedNumber"}}
-protolizer.SignedNumberInlineEncoder(int64({{if eq .Optional true}}*{{end}}x.{{.Name}}), field, buffer)
+pdk.SignedNumberInlineEncoder(int64({{if eq .Optional true}}*{{end}}x.{{.Name}}), field.Tags.Protobuf.WireType, buffer)
 return nil
 {{- end}}
 
 {{- define "EncodeUnsignedNumber"}}
-protolizer.UnsignedNumberInlineEncoder(uint64({{if eq .Optional true}}*{{end}}x.{{.Name}}), field, buffer)
+pdk.UnsignedNumberInlineEncoder(uint64({{if eq .Optional true}}*{{end}}x.{{.Name}}), field.Tags.Protobuf.WireType, buffer)
 return nil
 {{- end}}
 
 {{- define "EncodeFloat32"}}
-protolizer.Float32InlineEncode(int64({{if eq .Optional true}}*{{end}}x.{{.Name}}), buffer)
+pdk.Float32InlineEncode(int64({{if eq .Optional true}}*{{end}}x.{{.Name}}), buffer)
 return nil
 {{- end}}
 
 {{- define "EncodeFloat64"}}
-protolizer.Float64InlineEncode(float64({{if eq .Optional true}}*{{end}}x.{{.Name}}), buffer)
+pdk.Float64InlineEncode(float64({{if eq .Optional true}}*{{end}}x.{{.Name}}), buffer)
 return nil
 {{- end}}
 
 {{- define "EncodeString"}}
-protolizer.StringInlineEncode({{if eq .Optional true}}*{{end}}x.{{.Name}}, buffer)
+pdk.StringInlineEncode({{if eq .Optional true}}*{{end}}x.{{.Name}}, buffer)
 return nil
 {{- end}}
 
 {{- define "EncodeMessage"}}
-data, err := protolizer.FastInlineMarshal(x.{{.Name}})
-defer protolizer.Dealloc(data)
+data, err := protolizer.StaticCodec().InlineMarshal(x.{{.Name}})
+defer memory.Dealloc(data)
 if err != nil {
     return err
 }  
 
-bytes := protolizer.BufferEncode(data)
-defer protolizer.Dealloc(bytes)
+bytes := pdk.BufferEncode(data)
+defer memory.Dealloc(bytes)
 bytes.WriteTo(buffer)
 return nil
 {{- end}}

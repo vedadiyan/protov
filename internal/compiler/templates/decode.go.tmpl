@@ -1,5 +1,5 @@
 {{- define "DecodeMethod"}}
-func (x *{{.Name}}) Decode(field *protolizer.Field, buffer *bytes.Buffer) error {
+func (x *{{.Name}}) Decode(field *metadata.Field, buffer *bytes.Buffer) error {
     switch field.Tags.Protobuf.FieldNum {
         {{- range $field := .Fields}}
             case {{ $field.FieldNum }}: {
