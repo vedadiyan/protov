@@ -91,14 +91,9 @@ return nil
 {{- end}}
 
 {{- define "EncodeRepeatedString"}}
-tag, err := pdk.TagEncode(int32(field.Tags.Protobuf.FieldNum), pdk.WireTypeLen)
-defer memory.Dealloc(tag)
-if err != nil {
-    return err
-}
 for i, x := range x.{{.Name}} {
     if i != 0 {
-        buffer.Write(tag.Bytes())
+        buffer.Write(field.Tag)
     }
     pdk.StringInlineEncode(x, buffer)
 }
@@ -106,14 +101,9 @@ return nil
 {{- end}}
 
 {{- define "EncodeRepeatedMessage"}}
-tag, err := pdk.TagEncode(int32(field.Tags.Protobuf.FieldNum), pdk.WireTypeLen)
-defer memory.Dealloc(tag)
-if err != nil {
-    return err
-}
 for i, value := range x.{{.Name}} {
     if i != 0 {
-        buffer.Write(tag.Bytes())
+        buffer.Write(field.Tag)
     }
     data, err := protolizer.StaticCodec().InlineMarshal(&value)
     if err != nil {

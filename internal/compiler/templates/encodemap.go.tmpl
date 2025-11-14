@@ -1,13 +1,8 @@
 {{- define "EncodeMap"}}
-tag, err := pdk.TagEncode(int32(field.Tags.Protobuf.FieldNum), pdk.WireTypeLen)
-defer memory.Dealloc(tag)
-if err != nil {
-    return err
-}
 i := 0
 for key, value := range x.{{.Name}} {
     if i != 0 {
-        buffer.Write(tag.Bytes())
+        buffer.Write(field.Tag)
     }
     i++
     innerBuffer := memory.Alloc(0)

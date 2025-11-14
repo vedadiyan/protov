@@ -79,8 +79,6 @@ if err != nil {
     return err
 }  
 
-bytes := pdk.BufferEncode(data)
-defer memory.Dealloc(bytes)
-bytes.WriteTo(buffer)
+pdk.BufferInlineEncode(data, buffer)
 return nil
 {{- end}}
