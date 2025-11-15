@@ -4,7 +4,12 @@ go 1.23.0
 
 require (
 	github.com/bufbuild/protocompile v0.14.1
+	github.com/google/uuid v1.6.0
+	github.com/vedadiyan/flaggy v0.0.0-20221219094954-d106d0dc1b71
 	go.lsp.dev/protocol v0.12.0
+	go.yaml.in/yaml/v3 v3.0.4
+	golang.org/x/mod v0.21.0
+	golang.org/x/sys v0.26.0
 	google.golang.org/protobuf v1.36.9
 )
 
@@ -18,5 +23,4 @@ require (
 	go.uber.org/multierr v1.8.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/sys v0.0.0-20220319134239-a9b59b0215f8 // indirect
 )

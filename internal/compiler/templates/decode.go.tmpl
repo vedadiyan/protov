@@ -1,0 +1,105 @@
+{{- define "DecodeMethod"}}
+func (x *{{.Name}}) Decode(field *metadata.Field, buffer *bytes.Buffer) error {
+    switch field.Tags.Protobuf.FieldNum {
+        {{- range $field := .Fields}}
+            case {{ $field.FieldNum }}: {
+                {{template "DecodeField" $field}}
+            }
+        {{- end }}   
+        default: {
+            return fmt.Errorf("invalid field")
+        }     
+    }    
+}
+{{- end}}
+
+{{- define "DecodeField"}}
+    {{- if eq .Kind 1}}
+        {{template "DecodeBool" .}}
+    {{- else if or (eq .Kind 2) (eq .Kind 3) (eq .Kind 4) (eq .Kind 5) (eq .Kind 6)}}
+        {{template "DecodeSignedNumber" .}}
+    {{- else if or (eq .Kind 7) (eq .Kind 8) (eq .Kind 9) (eq .Kind 10) (eq .Kind 11)}}
+        {{template "DecodeUnsignedNumber" .}}
+    {{- else if eq .Kind 13}}
+        {{template "DecodeFloat32" .}}
+    {{- else if eq .Kind 14}}
+        {{template "DecodeFloat64" .}}
+    {{- else if eq .Kind 17}}
+        {{template "DecodeRepeated" .}}
+    {{- else if eq .Kind 21}}
+        {{template "DecodeMap" .}}
+    {{- else if eq .Kind 24}}
+        {{template "DecodeString" .}}
+    {{- else if eq .Kind 25}}
+        {{template "DecodeMessage" .}}
+    {{- else}}
+        return fmt.Errorf("unsupported field type {{.Kind}}")
+    {{- end}}
+{{- end}}
+
+{{- define "DecodeBool"}}
+value, err := pdk.BoolDecode(buffer)
+if err != nil {
+    return err
+} 
+x.{{.Name}} = {{- if eq .Optional true}}&{{end}}value
+return nil
+{{- end}}
+
+{{- define "DecodeSignedNumber"}}
+value, err := pdk.SignedNumberDecoder(field.Tags.Protobuf.WireType, buffer)
+if err != nil {
+    return err
+} 
+val := {{.BaseType}}(value)
+x.{{.Name}} = {{- if eq .Optional true}}&{{end}}val
+return nil
+{{- end}}
+
+{{- define "DecodeUnsignedNumber"}}
+value, err := pdk.UnsignedNumberDecoder(field.Tags.Protobuf.WireType, buffer)
+if err != nil {
+    return err
+} 
+val := {{.BaseType}}(value)
+x.{{.Name}} = {{- if eq .Optional true}}&{{end}}val
+return nil
+{{- end}}
+
+{{- define "DecodeFloat32"}}
+value, err := pdk.Float32Decode(buffer)
+if err != nil {
+    return err
+} 
+val := {{.BaseType}}(value)
+x.{{.Name}} = {{- if eq .Optional true}}&{{end}}val
+return nil
+{{- end}}
+
+{{- define "DecodeFloat64"}}
+value, err := pdk.Float64Decode(buffer)
+if err != nil {
+    return err
+}
+val := {{.BaseType}}(value)
+x.{{.Name}} = {{- if eq .Optional true}}&{{end}}val
+return nil
+{{- end}}
+
+{{- define "DecodeString"}}
+value, err := pdk.StringDecode(buffer)
+if err != nil {
+    return err
+} 
+x.{{.Name}} = {{- if eq .Optional true}}&{{end}}value
+return nil
+{{- end}}
+
+{{- define "DecodeMessage"}}
+value := new({{.BaseType}})
+if err := protolizer.StaticCodec().UnmarshalFromBuffer(value, buffer); err != nil {
+    return err
+}     
+x.{{.Name}} = {{- if eq .Optional true}}&{{end}}value    
+return nil
+{{- end}}

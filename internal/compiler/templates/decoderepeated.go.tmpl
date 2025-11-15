@@ -1,0 +1,172 @@
+{{- define "DecodeRepeated"}}
+    {{- if eq .Index 8}}
+        {{template "DecodeBytes" .}}
+    {{- else if eq .Index 1}}
+        {{template "DecodeRepeatedBool" .}}
+    {{- else if or (eq .Index 2) (eq .Index 3) (eq .Index 4) (eq .Index 5) (eq .Index 6)}}
+        {{template "DecodeRepeatedSigned" .}}
+    {{- else if or (eq .Index 7) (eq .Index 9) (eq .Index 10) (eq .Index 11)}}
+        {{template "DecodeRepeatedUnsigned" .}}
+    {{- else if eq .Index 13}}
+        {{template "DecodeRepeatedFloat32" .}}
+    {{- else if eq .Index 14}}
+        {{template "DecodeRepeatedFloat64" .}}
+    {{- else if eq .Index 24}}
+        {{template "DecodeRepeatedString" .}}
+    {{- else if eq .Index 25}}
+        {{template "DecodeRepeatedMessage" .}}
+    {{- else}}
+        return fmt.Errorf("unsupported index type %T", x.{{.Name}})
+    {{- end}}
+{{- end}}
+
+{{- define "DecodeBytes"}}
+bytes, err := pdk.BytesDecode(buffer)
+if err != nil {
+    return err
+}
+x.{{.Name}} = bytes
+return nil
+{{- end}}
+
+{{- define "DecodeRepeatedBool"}}
+bytes, err := pdk.BytesDecode(buffer)
+if err != nil {
+    return err
+}
+innerBuffer := memory.Alloc(0)
+innerBuffer.Write(bytes)
+defer memory.Dealloc(innerBuffer)
+for innerBuffer.Len() != 0 {
+    value, err := pdk.BoolDecode(innerBuffer)
+    if err != nil {
+        return err
+    }
+    x.{{.Name}} = append(x.{{.Name}}, {{.BaseType}}(value))
+}
+return nil
+{{- end}}
+
+{{- define "DecodeRepeatedSigned"}}
+bytes, err := pdk.BytesDecode(buffer)
+if err != nil {
+    return err
+}
+innerBuffer := memory.Alloc(0)
+innerBuffer.Write(bytes)
+defer memory.Dealloc(innerBuffer)
+for innerBuffer.Len() != 0 {
+    value, err := pdk.SignedNumberDecoder(field.Tags.Protobuf.WireType, innerBuffer)
+    if err != nil {
+        return err
+    }
+    x.{{.Name}} = append(x.{{.Name}}, {{.BaseType}}(value))
+}
+return nil
+{{- end}}
+
+{{- define "DecodeRepeatedUnsigned"}}
+bytes, err := pdk.BytesDecode(buffer)
+if err != nil {
+    return err
+}
+innerBuffer := memory.Alloc(0)
+innerBuffer.Write(bytes)
+defer memory.Dealloc(innerBuffer)
+for innerBuffer.Len() != 0 {
+    value, err := pdk.UnsignedNumberDecoder(field.Tags.Protobuf.WireType, innerBuffer)
+    if err != nil {
+        return err
+    }
+    x.{{.Name}} = append(x.{{.Name}}, {{.BaseType}}(value))
+}
+return nil
+{{- end}}
+
+{{- define "DecodeRepeatedFloat32"}}
+bytes, err := pdk.BytesDecode(buffer)
+if err != nil {
+    return err
+}
+innerBuffer := memory.Alloc(0)
+innerBuffer.Write(bytes)
+defer memory.Dealloc(innerBuffer)
+for innerBuffer.Len() != 0 {
+    value, err := pdk.Float32Decode(innerBuffer)
+    if err != nil {
+        return err
+    }
+    x.{{.Name}} = append(x.{{.Name}}, {{.BaseType}}(value))
+}
+return nil
+{{- end}}
+
+{{- define "DecodeRepeatedFloat64"}}
+bytes, err := pdk.BytesDecode(buffer)
+if err != nil {
+    return err
+}
+innerBuffer := memory.Alloc(0)
+innerBuffer.Write(bytes)
+defer memory.Dealloc(innerBuffer)
+for innerBuffer.Len() != 0 {
+    value, err := pdk.Float64Decode(innerBuffer)
+    if err != nil {
+        return err
+    }
+    x.{{.Name}} = append(x.{{.Name}}, {{.BaseType}}(value))
+}
+return nil
+{{- end}}
+
+{{- define "DecodeRepeatedString"}}
+i := 0
+for {
+    if i != 0 {
+        i, _, read, err := pdk.TagPeek(buffer)
+        if err != nil {
+            if err == io.EOF {
+                return nil
+            }
+            return err
+        }
+        if i != int32(field.Tags.Protobuf.FieldNum) {
+            break
+        }
+        read()
+    }
+    i++
+    value, err := pdk.StringDecode(buffer)
+    if err != nil {
+        return nil
+    }
+    x.{{.Name}} = append(x.{{.Name}}, {{.BaseType}}(value))
+}
+return nil
+{{- end}}
+
+{{- define "DecodeRepeatedMessage"}}
+i := 0
+for {
+    if i != 0 {
+        i, _, read, err := pdk.TagPeek(buffer)
+        if err != nil {
+            if err == io.EOF {
+                return nil
+            }
+            return err
+        }
+        if i != int32(field.Tags.Protobuf.FieldNum) {
+            break
+        }
+        read()
+    }
+    i++
+    value := new({{.BaseType}})
+    if err := protolizer.StaticCodec().UnmarshalFromBuffer(value, buffer); err != nil {
+        return nil
+    }
+    x.{{.Name}} = append(x.{{.Name}}, *value)
+}
+return nil
+{{- end}}

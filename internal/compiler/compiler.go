@@ -3,53 +3,62 @@ package compiler
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/base64"
 	"fmt"
-	"io"
-	"math"
+	"maps"
 	"os"
 	"path"
 	"reflect"
-	"strconv"
 	"strings"
+	"text/template"
 	"unicode"
 
 	"github.com/bufbuild/protocompile"
 	"github.com/bufbuild/protocompile/linker"
 	"github.com/bufbuild/protocompile/protoutil"
+	"github.com/google/uuid"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-// Format is the serialization format used to represent the default value.
-type Format int
-
-const (
-	_ Format = iota
-
-	// Descriptor uses the serialization format that protoc uses with the
-	// google.protobuf.FieldDescriptorProto.default_value field.
-	Descriptor
-
-	// GoTag uses the historical serialization format in Go struct field tags.
-	GoTag
+var (
+	//go:embed templates/decode.go.tmpl
+	_decodeTemplate string
+	//go:embed templates/decodemap.go.tmpl
+	_decodeMapTemplate string
+	//go:embed templates/decoderepeated.go.tmpl
+	_decodeRepeatedTemplate string
+	//go:embed templates/encode.go.tmpl
+	_encodeTemplate string
+	//go:embed templates/encodemap.go.tmpl
+	_encodeMapTemplate string
+	//go:embed templates/encoderepeated.go.tmpl
+	_encodeRepeatedTemplate string
+	//go:embed templates/enum.go.tmpl
+	_enumTemplate string
+	//go:embed templates/iszero.go.tmpl
+	_isZeroTemplate string
+	//go:embed templates/main.go.tmpl
+	_mainTemplate string
+	//go:embed templates/message.go.tmpl
+	_messageTemplate string
+	//go:embed templates/service.go.tmpl
+	_serviceTemplate string
 )
 
 type (
-	Ignorables []string
-	Resolver   struct {
-		protocompile.SourceResolver
-		Dir string
-	}
 	Field struct {
 		Name          string
 		Type          string
 		BaseType      string
 		KeyBaseType   string
 		IndexBaseType string
-		Tags          []string
+		Options       map[string]any
 		Optional      bool
 		MarshalledTag string
 		Kind          reflect.Kind
@@ -57,603 +66,772 @@ type (
 		Key           reflect.Kind
 		FieldNum      int
 	}
+
 	EnumValue struct {
 		Name   string
 		Number int
 	}
+
 	Enum struct {
-		Name   string
-		Values []*EnumValue
+		Name    string
+		Values  []*EnumValue
+		Options map[string]any
+		File    *File
 	}
+
 	Message struct {
 		Name       string
 		Fields     []*Field
 		Ignorables Ignorables
+		Options    map[string]any
 		Descriptor string
 		TypeName   string
+		File       *File
 	}
+
+	Service struct {
+		Name           string
+		Options        map[string]any
+		Descriptor     string
+		Rpcs           []*Rpc
+		RpcOptions     map[string]any
+		CodeGeneration []string
+		File           *File
+	}
+
+	Rpc struct {
+		Name        string
+		Options     map[string]any
+		Descriptor  string
+		Input       string
+		Output      string
+		ServiceName string
+	}
+
 	File struct {
-		Messages []*Message
-		Enums    []*Enum
+		Dir         string
+		PackageName string
+		FilePath    string
+		Source      string
+		Options     map[string]any
+		Messages    []*Message
+		Services    []*Service
+		Enums       []*Enum
+		Comments    map[string]string
+		FileName    string
 	}
+
 	AST struct {
 		Files []*File
 	}
 )
 
-func (r *Resolver) accessor(f string) (io.ReadCloser, error) {
-	f = strings.ReplaceAll(strings.ReplaceAll(f, "\\", "/"), r.Dir, "")
-	file := path.Join(r.Dir, f)
-	data, err := os.ReadFile(file)
-	if err != nil {
-		return func(f string) (io.ReadCloser, error) {
-			data, err := os.ReadFile(f)
-			if err != nil {
-				return nil, err
-			}
-			return io.NopCloser(bytes.NewBuffer(data)), nil
-		}(path.Join("C:\\protoc\\include", f))
+func Compile(file *File) ([]byte, error) {
+	allTemplates := []string{
+		_decodeTemplate,
+		_decodeMapTemplate,
+		_decodeRepeatedTemplate,
+		_encodeTemplate,
+		_encodeMapTemplate,
+		_encodeRepeatedTemplate,
+		_enumTemplate,
+		_isZeroTemplate,
+		_mainTemplate,
+		_messageTemplate,
+		_serviceTemplate,
 	}
-	return io.NopCloser(bytes.NewBuffer(data)), nil
+	template := template.New("temp")
+	templates, err := parseTemplates(template, allTemplates...)
+	if err != nil {
+		return nil, err
+	}
+	out := bytes.NewBuffer([]byte{})
+	if err := templates.ExecuteTemplate(out, "Main", file); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
 }
 
-func NewResolver(dir string) *Resolver {
-	r := new(Resolver)
-	r.Dir = dir
-	r.Accessor = r.accessor
-	return r
-}
+func Parse(file string) (*AST, error) {
+	normalizedFile := strings.ReplaceAll(file, "\\", "/")
+	dir := path.Dir(normalizedFile) + "/"
 
-func Compile(file string) (*AST, error) {
-	dir := fmt.Sprintf("%s/", path.Dir(strings.ReplaceAll(file, "\\", "/")))
 	var report report
 	var symbols linker.Symbols
+
 	compiler := protocompile.Compiler{
-		SourceInfoMode: protocompile.SourceInfoExtraOptionLocations,
+		SourceInfoMode: protocompile.SourceInfoExtraOptionLocations | protocompile.SourceInfoExtraComments,
 		Resolver:       NewResolver(dir),
 		Symbols:        &symbols,
 		Reporter:       &report,
 	}
-	linker, err := compiler.Compile(context.TODO(), file)
+
+	linkedFiles, err := compiler.Compile(context.TODO(), file)
 	if err != nil {
-		return nil, err
-	}
-	out := new(AST)
-	out.Files = make([]*File, len(linker))
-	for i, linker := range linker {
-		ast, err := GetFile(linker)
-		if err != nil {
-			return nil, err
-		}
-		out.Files[i] = ast
+		return nil, fmt.Errorf("compilation failed: %w", err)
 	}
 
-	return out, nil
+	ast := &AST{
+		Files: make([]*File, len(linkedFiles)),
+	}
+
+	for i, linkedFile := range linkedFiles {
+		fileAST, err := GetFile(dir, normalizedFile, linkedFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to process file %d: %w", i, err)
+		}
+		ast.Files[i] = fileAST
+	}
+
+	return ast, nil
 }
 
-func GetFile(file linker.File) (*File, error) {
-	out := new(File)
-	messages, err := GetMessages(file.Messages(), nil)
+func GetFile(dir string, filePath string, file linker.File) (*File, error) {
+	out := &File{
+		Options: make(map[string]any),
+	}
+	out.Dir = dir
+	_, out.Source = path.Split(filePath)
+	out.FileName = strings.ReplaceAll(strings.ToLower(out.Source), ".proto", "")
+	protodesc := protodesc.ToFileDescriptorProto(file)
+	out.Comments = GetComments(protodesc, file)
+
+	if opts, ok := file.Options().(*descriptorpb.FileOptions); ok {
+		out.FilePath = opts.GetGoPackage()
+		_, out.PackageName = path.Split(out.FilePath)
+		proto.RangeExtensions(opts, func(et protoreflect.ExtensionType, a any) bool {
+			key := fmt.Sprintf("%s.%s",
+				et.TypeDescriptor().Parent().FullName().Name(),
+				et.TypeDescriptor().FullName().Name())
+			out.Options[key] = out.getInnerOptions("", a)
+			return true
+		})
+	}
+
+	messages, err := out.GetMessages(file.Messages(), nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get messages: %w", err)
 	}
 	out.Messages = messages
-	enums, err := GetEnums(file.Enums())
+
+	services, err := out.GetServices(file.Services())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get messages: %w", err)
+	}
+	out.Services = services
+
+	enums, err := out.GetEnums(file.Enums())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get enums: %w", err)
 	}
 	out.Enums = enums
+
 	return out, nil
 }
 
-func GetMessages(md protoreflect.MessageDescriptors, ignoreList Ignorables) ([]*Message, error) {
+func (file *File) GetMessages(md protoreflect.MessageDescriptors, ignoreList Ignorables) ([]*Message, error) {
 	l := md.Len()
 	if l == 0 {
 		return nil, nil
 	}
-	out := make([]*Message, 0)
 
-	for i := range l {
+	out := make([]*Message, 0, l)
+
+	for i := 0; i < l; i++ {
 		messageDescriptor := md.Get(i)
 		name := messageDescriptor.Name()
+
 		if ignoreList.Contains(string(name)) {
 			continue
 		}
-		message, err := GetMessage(name, messageDescriptor.FullName(), messageDescriptor.Fields())
+
+		message, err := file.GetMessage(messageDescriptor)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to get message %s: %w", name, err)
 		}
-		xxx := protoutil.ProtoFromMessageDescriptor(messageDescriptor)
-		zzz, err := protojson.Marshal(xxx)
+
+		protoDescriptor := protoutil.ProtoFromMessageDescriptor(messageDescriptor)
+		jsonData, err := protojson.Marshal(protoDescriptor)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to marshal descriptor for %s: %w", name, err)
 		}
-		message.Descriptor = base64.StdEncoding.EncodeToString(zzz)
+		message.Descriptor = base64.StdEncoding.EncodeToString(jsonData)
 
 		out = append(out, message)
-		nestedMessagesLength := messageDescriptor.Messages().Len()
-		if nestedMessagesLength != 0 {
-			messages, err := GetMessages(messageDescriptor.Messages(), message.Ignorables)
+
+		if nestedMsgLen := messageDescriptor.Messages().Len(); nestedMsgLen != 0 {
+			nestedMessages, err := file.GetMessages(messageDescriptor.Messages(), message.Ignorables)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to get nested messages in %s: %w", name, err)
 			}
-			out = append(out, messages...)
+			out = append(out, nestedMessages...)
 		}
 	}
+
 	return out, nil
 }
 
-func GetMessage(name protoreflect.Name, fullName protoreflect.FullName, fd protoreflect.FieldDescriptors) (*Message, error) {
-	out := new(Message)
-	l := fd.Len()
+func (file *File) GetMessage(message protoreflect.MessageDescriptor) (*Message, error) {
+	name := message.Name()
+	fullName := message.FullName()
+
+	fields := message.Fields()
+
+	l := fields.Len()
+
+	out := &Message{
+		Name:       string(name),
+		TypeName:   string(fullName),
+		Fields:     make([]*Field, 0, l),
+		Ignorables: NewIgnorables(),
+		File:       file,
+	}
+
+	if opts, ok := message.Options().(*descriptorpb.MessageOptions); ok {
+		proto.RangeExtensions(opts, func(et protoreflect.ExtensionType, a any) bool {
+			key := fmt.Sprintf("%s.%s",
+				et.TypeDescriptor().Parent().FullName().Name(),
+				et.TypeDescriptor().FullName().Name())
+			key = toGoName(key)
+			out.Options[key] = file.getInnerOptions("", a)
+			return true
+		})
+	}
+
 	if l == 0 {
 		return out, nil
 	}
-	out.Name = string(name)
-	out.Fields = make([]*Field, l)
-	out.Ignorables = make([]string, 0)
-	for i := range l {
-		fieldDescriptor := fd.Get(i)
-		field, err := GetField(fieldDescriptor)
+
+	for i := 0; i < l; i++ {
+		fieldDescriptor := fields.Get(i)
+
+		field, err := file.GetField(fieldDescriptor)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to get field %s: %w", fieldDescriptor.Name(), err)
 		}
-		out.Fields[i] = field
-		if ok, value := CanBeIgnored(fieldDescriptor); ok {
-			out.Ignorables = append(out.Ignorables, value)
+		out.Fields = append(out.Fields, field)
+
+		if ok, value := canBeIgnored(fieldDescriptor); ok {
+			out.Ignorables.Add(value)
 		}
-		out.TypeName = string(fullName)
 	}
+
 	return out, nil
 }
 
-func GetField(fieldDescriptor protoreflect.FieldDescriptor) (*Field, error) {
-	out := new(Field)
-	out.Name = GetName(string(fieldDescriptor.Name()))
-	out.Type = GetKind(fieldDescriptor)
-	out.BaseType = strings.ReplaceAll(out.Type, "*", "")
-	out.BaseType = strings.ReplaceAll(out.BaseType, "[]", "")
+func (file *File) GetField(fd protoreflect.FieldDescriptor) (*Field, error) {
+	fieldType := getKind(fd)
 
-	out.Tags = GetTags(fieldDescriptor)
-	out.FieldNum = int(fieldDescriptor.Number())
-	out.Optional = fieldDescriptor.HasOptionalKeyword()
-	if fieldDescriptor.IsMap() {
+	out := &Field{
+		Name:          toGoName(string(fd.Name())),
+		Type:          fieldType,
+		BaseType:      cleanType(fieldType),
+		FieldNum:      int(fd.Number()),
+		Optional:      fd.HasOptionalKeyword(),
+		MarshalledTag: marshalTags(fd),
+	}
+
+	if opts, ok := fd.Options().(*descriptorpb.FieldOptions); ok {
+		proto.RangeExtensions(opts, func(et protoreflect.ExtensionType, a any) bool {
+			key := fmt.Sprintf("%s.%s",
+				et.TypeDescriptor().Parent().FullName().Name(),
+				et.TypeDescriptor().FullName().Name())
+			out.Options[key] = a
+			return true
+		})
+	}
+
+	switch {
+	case fd.IsMap():
 		out.Kind = reflect.Map
-		out.Index = GetReflectedKind(fieldDescriptor.MapKey().Kind())
-		out.Key = GetReflectedKind(fieldDescriptor.MapValue().Kind())
-		out.KeyBaseType = GetKind(fieldDescriptor.MapKey())
-		out.KeyBaseType = strings.ReplaceAll(out.KeyBaseType, "*", "")
-		out.KeyBaseType = strings.ReplaceAll(out.KeyBaseType, "[]", "")
-		out.IndexBaseType = GetKind(fieldDescriptor.MapValue())
-		out.IndexBaseType = strings.ReplaceAll(out.IndexBaseType, "*", "")
-		out.IndexBaseType = strings.ReplaceAll(out.IndexBaseType, "[]", "")
-	} else if fieldDescriptor.IsList() {
+		out.Index = getReflectedKind(fd.MapKey().Kind())
+		out.Key = getReflectedKind(fd.MapValue().Kind())
+		out.KeyBaseType = cleanType(getKind(fd.MapKey()))
+		out.IndexBaseType = cleanType(getKind(fd.MapValue()))
+
+	case fd.IsList():
 		out.Kind = reflect.Array
-		out.Index = GetReflectedKind(fieldDescriptor.Kind())
-		out.IndexBaseType = GetKind(fieldDescriptor)
-		out.IndexBaseType = strings.ReplaceAll(out.IndexBaseType, "*", "")
-		out.IndexBaseType = strings.ReplaceAll(out.IndexBaseType, "[]", "")
-	} else {
-		out.Kind = GetReflectedKind(fieldDescriptor.Kind())
+		out.Index = getReflectedKind(fd.Kind())
+		out.IndexBaseType = cleanType(fieldType)
+
+	default:
+		out.Kind = getReflectedKind(fd.Kind())
 	}
-	out.MarshalledTag = MarshallTags(fieldDescriptor)
+
 	return out, nil
 }
 
-func GetEnums(md protoreflect.EnumDescriptors) ([]*Enum, error) {
+func (file *File) GetEnums(md protoreflect.EnumDescriptors) ([]*Enum, error) {
 	l := md.Len()
 	if l == 0 {
 		return nil, nil
 	}
-	out := make([]*Enum, 0)
-	for i := range l {
+
+	out := make([]*Enum, 0, l)
+
+	for i := 0; i < l; i++ {
 		enumDescriptor := md.Get(i)
-		message, err := GetEnum(enumDescriptor.Name(), enumDescriptor.Values())
+		enum, err := file.getEnum(enumDescriptor)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to get enum %s: %w", enumDescriptor.Name(), err)
 		}
-		out = append(out, message)
+		out = append(out, enum)
 	}
+
 	return out, nil
 }
 
-func GetEnum(name protoreflect.Name, ed protoreflect.EnumValueDescriptors) (*Enum, error) {
-	out := new(Enum)
+func (file *File) getEnum(enum protoreflect.EnumDescriptor) (*Enum, error) {
+	name := enum.Name()
+	ed := enum.Values()
 	l := ed.Len()
 	if l == 0 {
 		return nil, nil
 	}
-	out.Name = string(name)
-	enumValues := make([]*EnumValue, l)
-	for i := range l {
-		enumValueDescriptor := ed.Get(i)
-		enumValue := new(EnumValue)
-		enumValue.Name = string(enumValueDescriptor.Name())
-		enumValue.Number = int(enumValueDescriptor.Number())
-		enumValues = append(enumValues, enumValue)
+
+	out := &Enum{
+		Name:   string(name),
+		Values: make([]*EnumValue, 0, l),
+		File:   file,
 	}
-	out.Values = enumValues
+
+	if opts, ok := enum.Options().(*descriptorpb.EnumOptions); ok {
+		proto.RangeExtensions(opts, func(et protoreflect.ExtensionType, a any) bool {
+			key := fmt.Sprintf("%s.%s",
+				et.TypeDescriptor().Parent().FullName().Name(),
+				et.TypeDescriptor().FullName().Name())
+			out.Options[key] = file.getInnerOptions("", a)
+			return true
+		})
+	}
+
+	for i := 0; i < l; i++ {
+		evd := ed.Get(i)
+		out.Values = append(out.Values, &EnumValue{
+			Name:   string(evd.Name()),
+			Number: int(evd.Number()),
+		})
+	}
+
 	return out, nil
 }
 
-func CanBeIgnored(fieldDescriptor protoreflect.FieldDescriptor) (bool, string) {
-	if fieldDescriptor.IsMap() {
-		return true, string(fieldDescriptor.Message().Name())
+func (file *File) GetServices(md protoreflect.ServiceDescriptors) ([]*Service, error) {
+	l := md.Len()
+	if l == 0 {
+		return nil, nil
+	}
+
+	out := make([]*Service, 0, l)
+
+	for i := 0; i < l; i++ {
+		serviceDescriptor := md.Get(i)
+		name := serviceDescriptor.Name()
+
+		service, err := file.GetService(i, serviceDescriptor)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get message %s: %w", name, err)
+		}
+
+		// Encode descriptor as base64 JSON
+		protoDescriptor := protoutil.ProtoFromServiceDescriptor(serviceDescriptor)
+		jsonData, err := protojson.Marshal(protoDescriptor)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal descriptor for %s: %w", name, err)
+		}
+		service.Descriptor = base64.StdEncoding.EncodeToString(jsonData)
+
+		out = append(out, service)
+	}
+
+	return out, nil
+}
+
+func (file *File) GetService(n int, service protoreflect.ServiceDescriptor) (*Service, error) {
+	methods := service.Methods()
+
+	codeGeneration := make([]string, 0)
+	if value, ok := file.Comments[fmt.Sprintf(".service[%d]", n)]; ok {
+		comments := ExpandComments(value)
+		for _, comment := range comments {
+			switch comment[0] {
+			case "@generate":
+				{
+					codeGeneration = append(codeGeneration, comment[1])
+				}
+			}
+		}
+	}
+
+	l := methods.Len()
+
+	out := &Service{
+		Name:           string(service.Name()),
+		Rpcs:           make([]*Rpc, 0, l),
+		Options:        make(map[string]any),
+		CodeGeneration: codeGeneration,
+		File:           file,
+	}
+
+	if opts, ok := service.Options().(*descriptorpb.ServiceOptions); ok {
+		proto.RangeExtensions(opts, func(et protoreflect.ExtensionType, a any) bool {
+			key := fmt.Sprintf("%s.%s",
+				et.TypeDescriptor().Parent().FullName().Name(),
+				et.TypeDescriptor().FullName().Name())
+			key = toGoName(key)
+			if v, ok := a.(*dynamicpb.Message); ok {
+				data := make(map[string]any)
+				v.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+					data[toGoName(string(fd.Name()))] = file.getInnerOptions("", v.Interface())
+					return true
+				})
+				out.Options[key] = data
+				return true
+			}
+			out.Options[key] = a
+			return true
+		})
+	}
+
+	if l == 0 {
+		return out, nil
+	}
+
+	for i := 0; i < l; i++ {
+		methodDescriptor := methods.Get(i)
+
+		rpc, err := file.GetRpc(fmt.Sprintf(".service[%d].method[%d].options", n, i), string(service.Name()), methodDescriptor)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get field %s: %w", methodDescriptor.Name(), err)
+		}
+		out.Rpcs = append(out.Rpcs, rpc)
+	}
+
+	out.RpcOptions = make(map[string]any)
+	for _, rpc := range out.Rpcs {
+		ConcatOptions(out.RpcOptions, rpc.Options)
+		tmpMap := make(map[string]any)
+		ConcatOptionValues(tmpMap, rpc.Options)
+		rpc.Options = tmpMap
+	}
+
+	return out, nil
+}
+
+func (file *File) GetRpc(path string, serviceName string, fd protoreflect.MethodDescriptor) (*Rpc, error) {
+	input := fd.Input().Name()
+	output := fd.Output().Name()
+
+	out := &Rpc{
+		Name:        string(fd.Name()),
+		Input:       string(input),
+		Output:      string(output),
+		Options:     make(map[string]any),
+		ServiceName: serviceName,
+	}
+
+	if opts, ok := fd.Options().(*descriptorpb.MethodOptions); ok {
+		proto.RangeExtensions(opts, func(et protoreflect.ExtensionType, a any) bool {
+			fieldDescriptor := protodesc.ToFieldDescriptorProto(et.TypeDescriptor().Descriptor())
+			n1 := -1
+			if fieldDescriptor.Number != nil {
+				n1 = int(*fieldDescriptor.Number)
+			}
+			key := fmt.Sprintf("%s.%s",
+				et.TypeDescriptor().Parent().FullName().Name(),
+				et.TypeDescriptor().FullName().Name())
+			key = toGoName(key)
+			out.Options[key] = file.getInnerOptions(fmt.Sprintf("%s.%d", path, n1), a)
+			return true
+		})
+	}
+
+	return out, nil
+}
+
+// Helper functions
+
+func ConcatOptions(dest map[string]any, src map[string]any) {
+	for key, value := range src {
+		if value, ok := value.(map[string]any); ok {
+			v := make(map[string]any)
+			dest[key] = v
+			ConcatOptions(v, value)
+			continue
+		}
+		if value, ok := value.([]any); ok {
+			v := make(map[string]any)
+			dest[key] = []any{v}
+			for _, val := range value {
+				if value, ok := val.(map[string]any); ok {
+					ConcatOptions(v, value)
+					continue
+				}
+			}
+			continue
+		}
+		dest[key] = fmt.Sprintf("%T", value)
+	}
+}
+
+func ConcatOptionValues(dest map[string]any, src map[string]any) {
+	for key, value := range src {
+		if value, ok := value.(map[string]any); ok {
+			v := make(map[string]any)
+			dest[key] = v
+			ConcatOptionValues(v, value)
+			continue
+		}
+		if value, ok := value.([]any); ok {
+			allKeys := make(map[string]any)
+			for _, val := range value {
+				if value, ok := val.(map[string]any); ok {
+					v := make(map[string]any)
+					ConcatOptionValues(v, value)
+					maps.Copy(allKeys, v)
+					continue
+				}
+			}
+			for _, val := range value {
+				if value, ok := val.(map[string]any); ok {
+					for k, val := range allKeys {
+						if _, ok := value[k]; !ok {
+							value[k] = reflect.Zero(reflect.TypeOf(val)).Interface()
+						}
+					}
+				}
+			}
+		}
+		dest[key] = value
+	}
+}
+
+func (file *File) getInnerOptions(optionPath string, v any) any {
+	if v, ok := v.(*dynamicpb.Message); ok {
+		out := make(map[string]any)
+		v.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+			fieldDescriptor := protodesc.ToFieldDescriptorProto(fd)
+			n := -1
+			if fieldDescriptor.Number != nil {
+				n = int(*fieldDescriptor.Number)
+			}
+			out[toGoName(string(fd.Name()))] = file.getInnerOptions(fmt.Sprintf("%s.%d", optionPath, n), v.Interface())
+			return true
+		})
+		return out
+	}
+	if list, ok := v.(protoreflect.List); ok {
+		out := make([]any, list.Len())
+		for i := 0; i < list.Len(); i++ {
+			out[i] = file.getInnerOptions(fmt.Sprintf("%s.%d", optionPath, i), list.Get(i).Interface())
+		}
+		return out
+	}
+	if value, ok := file.Comments[optionPath]; ok {
+		comments := ExpandComments(value)
+		for _, comment := range comments {
+			switch comment[0] {
+			case "@embed":
+				{
+					data, err := os.ReadFile(path.Join(file.Dir, v.(string)))
+					if err != nil {
+						panic(err)
+					}
+
+					return ByteString(StringToGoByteArray(string(data)))
+				}
+			}
+		}
+	}
+	return v
+}
+
+func canBeIgnored(fd protoreflect.FieldDescriptor) (bool, string) {
+	if fd.IsMap() {
+		return true, string(fd.Message().Name())
 	}
 	return false, ""
 }
 
-func GetKind(fieldDescriptor protoreflect.FieldDescriptor) string {
-	if fieldDescriptor.IsMap() {
-		return fmt.Sprintf("map[%s]%s", GetKind(fieldDescriptor.MapKey()), GetKind(fieldDescriptor.MapValue()))
-	}
-	flags := ""
-	if fieldDescriptor.HasOptionalKeyword() || fieldDescriptor.Kind() == protoreflect.MessageKind {
-		flags = "*"
-	}
-	if fieldDescriptor.IsList() {
-		flags = "[]"
-	}
-	switch fieldDescriptor.Kind() {
-	case protoreflect.BoolKind:
-		{
-			return fmt.Sprintf("%s%s", flags, "bool")
-		}
-	case protoreflect.EnumKind:
-		{
-			return fmt.Sprintf("%s%s", flags, fieldDescriptor.Enum().Name())
-		}
-	case protoreflect.Int32Kind:
-		{
-			return fmt.Sprintf("%s%s", flags, "int")
-		}
-	case protoreflect.Sint32Kind:
-		{
-			return fmt.Sprintf("%s%s", flags, "int")
-		}
-	case protoreflect.Uint32Kind:
-		{
-			return fmt.Sprintf("%s%s", flags, "uint")
-		}
-	case protoreflect.Int64Kind:
-		{
-			return fmt.Sprintf("%s%s", flags, "int64")
-		}
-	case protoreflect.Sint64Kind:
-		{
-			return fmt.Sprintf("%s%s", flags, "int64")
-		}
-	case protoreflect.Uint64Kind:
-		{
-			return fmt.Sprintf("%s%s", flags, "uint64")
-		}
-	case protoreflect.Sfixed32Kind:
-		{
-			return fmt.Sprintf("%s%s", flags, "int")
-		}
-	case protoreflect.Fixed32Kind:
-		{
-			return fmt.Sprintf("%s%s", flags, "int")
-		}
-	case protoreflect.FloatKind:
-		{
-			return fmt.Sprintf("%s%s", flags, "float32")
-		}
-	case protoreflect.Sfixed64Kind:
-		{
-			return fmt.Sprintf("%s%s", flags, "int64")
-		}
-	case protoreflect.Fixed64Kind:
-		{
-			return fmt.Sprintf("%s%s", flags, "int64")
-		}
-	case protoreflect.DoubleKind:
-		{
-			return fmt.Sprintf("%s%s", flags, "float64")
-		}
-	case protoreflect.StringKind:
-		{
-			return fmt.Sprintf("%s%s", flags, "string")
-		}
-	case protoreflect.BytesKind:
-		{
-			return "[]byte"
-		}
-	case protoreflect.MessageKind:
-		{
-
-			return fmt.Sprintf("%s%s", flags, fieldDescriptor.Message().Name())
-		}
-	case protoreflect.GroupKind:
-		{
-			return "interfacce {}"
-		}
-	default:
-		{
-			return ""
-		}
-	}
+func cleanType(typ string) string {
+	typ = strings.ReplaceAll(typ, "*", "")
+	typ = strings.ReplaceAll(typ, "[]", "")
+	return typ
 }
 
-func GetTags(fieldDescriptor protoreflect.FieldDescriptor) []string {
-	out := make([]string, 0)
-	if fieldDescriptor.HasJSONName() {
-		out = append(out, fmt.Sprintf(`json:"%s"`, fieldDescriptor.JSONName()))
-	}
-	opts, ok := fieldDescriptor.Options().(*descriptorpb.FieldOptions)
-	if !ok {
-		return out
-	}
-	proto.RangeExtensions(opts, func(et protoreflect.ExtensionType, a any) bool {
-		out = append(out, fmt.Sprintf("%s.%s:\"%v\"", et.TypeDescriptor().Parent().FullName().Name(), et.TypeDescriptor().FullName().Name(), a))
-		return true
-	})
-	return out
-}
-
-func (i Ignorables) Contains(value string) bool {
-	for _, v := range i {
-		if v == value {
-			return true
-		}
-	}
-	return false
-}
-
-func MarshallTags(fd protoreflect.FieldDescriptor) string {
-	var buffer bytes.Buffer
-	buffer.WriteString("protobuf:")
-	buffer.WriteRune('"')
-	buffer.WriteString(marshallTags(fd, false))
-	buffer.WriteRune('"')
-	if fd.HasJSONName() {
-		buffer.WriteString(" ")
-		buffer.WriteString("json:")
-		buffer.WriteRune('"')
-		buffer.WriteString(fd.JSONName())
-		buffer.WriteRune('"')
-	}
+func getKind(fd protoreflect.FieldDescriptor) string {
 	if fd.IsMap() {
-		buffer.WriteString(" ")
-		buffer.WriteString("protobuf_key:")
-		buffer.WriteRune('"')
-		buffer.WriteString(marshallTags(fd.MapKey(), true))
-		buffer.WriteRune('"')
-		buffer.WriteString(" ")
-		buffer.WriteString("protobuf_val:")
-		buffer.WriteRune('"')
-		buffer.WriteString(marshallTags(fd.MapValue(), true))
-		buffer.WriteRune('"')
+		return fmt.Sprintf("map[%s]%s", getKind(fd.MapKey()), getKind(fd.MapValue()))
 	}
+
+	var prefix string
+	if fd.HasOptionalKeyword() || fd.Kind() == protoreflect.MessageKind {
+		prefix = "*"
+	}
+	if fd.IsList() {
+		prefix = "[]"
+	}
+
+	var baseType string
+	switch fd.Kind() {
+	case protoreflect.BoolKind:
+		baseType = "bool"
+	case protoreflect.EnumKind:
+		baseType = string(fd.Enum().Name())
+	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind, protoreflect.Fixed32Kind:
+		baseType = "int"
+	case protoreflect.Uint32Kind:
+		baseType = "uint"
+	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind, protoreflect.Fixed64Kind:
+		baseType = "int64"
+	case protoreflect.Uint64Kind:
+		baseType = "uint64"
+	case protoreflect.FloatKind:
+		baseType = "float32"
+	case protoreflect.DoubleKind:
+		baseType = "float64"
+	case protoreflect.StringKind:
+		baseType = "string"
+	case protoreflect.BytesKind:
+		return "[]byte"
+	case protoreflect.MessageKind:
+		baseType = string(fd.Message().Name())
+	case protoreflect.GroupKind:
+		return "interface{}"
+	default:
+		return ""
+	}
+
+	return prefix + baseType
+}
+
+func getReflectedKind(k protoreflect.Kind) reflect.Kind {
+	switch k {
+	case protoreflect.BoolKind:
+		return reflect.Bool
+	case protoreflect.EnumKind, protoreflect.Int32Kind, protoreflect.Sint32Kind,
+		protoreflect.Sfixed32Kind, protoreflect.Fixed32Kind:
+		return reflect.Int
+	case protoreflect.Uint32Kind:
+		return reflect.Uint
+	case protoreflect.Int64Kind, protoreflect.Sint64Kind,
+		protoreflect.Sfixed64Kind, protoreflect.Fixed64Kind:
+		return reflect.Int64
+	case protoreflect.Uint64Kind:
+		return reflect.Uint64
+	case protoreflect.FloatKind:
+		return reflect.Float32
+	case protoreflect.DoubleKind:
+		return reflect.Float64
+	case protoreflect.StringKind:
+		return reflect.String
+	case protoreflect.BytesKind:
+		return reflect.Array
+	case protoreflect.MessageKind:
+		return reflect.Struct
+	default:
+		return reflect.Invalid
+	}
+}
+
+func toGoName(s string) string {
+	if s == "" {
+		return ""
+	}
+
+	segments := strings.FieldsFunc(s, func(r rune) bool {
+		return r == '_' || r == '.'
+	})
+	for i, segment := range segments {
+		if segment == "" {
+			continue
+		}
+		runes := []rune(segment)
+		runes[0] = unicode.ToUpper(runes[0])
+		segments[i] = string(runes)
+	}
+	return strings.Join(segments, "")
+}
+
+func StringToGoByteArray(str string) string {
+	buffer := bytes.NewBufferString("[]byte {")
+	line := bytes.NewBufferString("")
+	for i := 0; i < len(str); i++ {
+		if i != 0 && i%16 == 0 {
+			buffer.WriteString("\r\n")
+			buffer.WriteString("\t")
+			buffer.Write(line.Bytes())
+			line.Reset()
+		}
+		line.WriteString(fmt.Sprintf("0x%02x, ", str[i]))
+	}
+	buffer.WriteString("\r\n")
+	buffer.WriteString("\t")
+	buffer.Write(line.Bytes())
+	buffer.WriteString("\r\n")
+	buffer.WriteString("}")
 	return buffer.String()
 }
 
-func marshallTags(fd protoreflect.FieldDescriptor, skipSyntax bool) string {
-	var tag []string
-	switch fd.Kind() {
-	case protoreflect.BoolKind, protoreflect.EnumKind, protoreflect.Int32Kind, protoreflect.Uint32Kind, protoreflect.Int64Kind, protoreflect.Uint64Kind:
-		tag = append(tag, "varint")
-	case protoreflect.Sint32Kind:
-		tag = append(tag, "zigzag32")
-	case protoreflect.Sint64Kind:
-		tag = append(tag, "zigzag64")
-	case protoreflect.Sfixed32Kind, protoreflect.Fixed32Kind, protoreflect.FloatKind:
-		tag = append(tag, "fixed32")
-	case protoreflect.Sfixed64Kind, protoreflect.Fixed64Kind, protoreflect.DoubleKind:
-		tag = append(tag, "fixed64")
-	case protoreflect.StringKind, protoreflect.BytesKind, protoreflect.MessageKind:
-		tag = append(tag, "bytes")
-	case protoreflect.GroupKind:
-		tag = append(tag, "group")
+func parseTemplates(t *template.Template, templates ...string) (*template.Template, error) {
+	if len(templates) == 0 {
+		return nil, fmt.Errorf("template: no files named in call to ParseFiles")
 	}
-	tag = append(tag, strconv.Itoa(int(fd.Number())))
-	switch fd.Cardinality() {
-	case protoreflect.Optional:
-		tag = append(tag, "opt")
-	case protoreflect.Required:
-		tag = append(tag, "req")
-	case protoreflect.Repeated:
-		tag = append(tag, "rep")
+	for _, i := range templates {
+		name := uuid.New().String()
+		var tmpl *template.Template
+		if t == nil {
+			t = template.New(name)
+		}
+		tmpl = t.New(name)
+
+		_, err := tmpl.Parse(i)
+		if err != nil {
+			return nil, err
+		}
 	}
-	if fd.IsPacked() {
-		tag = append(tag, "packed")
-	}
-	name := string(fd.Name())
-	if fd.Kind() == protoreflect.GroupKind {
-		// The name of the FieldDescriptor for a group field is
-		// lowercased. To find the original capitalization, we
-		// look in the field's MessageType.
-		name = string(fd.Message().Name())
-	}
-	tag = append(tag, "name="+name)
-	if jsonName := fd.JSONName(); jsonName != "" && jsonName != name && !fd.IsExtension() {
-		// NOTE: The jsonName != name condition is suspect, but it preserve
-		// the exact same semantics from the previous generator.
-		tag = append(tag, "json="+jsonName)
-	}
-	// The previous implementation does not tag extension fields as proto3,
-	// even when the field is defined in a proto3 file. Match that behavior
-	// for consistency.
-	if !skipSyntax && fd.Syntax() == protoreflect.Proto3 && !fd.IsExtension() {
-		tag = append(tag, "proto3")
-	}
-	if fd.Kind() == protoreflect.EnumKind {
-		tag = append(tag, "enum="+string(fd.Enum().FullName()))
-	}
-	if fd.ContainingOneof() != nil {
-		tag = append(tag, "oneof")
-	}
-	// This must appear last in the tag, since commas in strings aren't escaped.
-	if fd.HasDefault() {
-		def, _ := marshallDefaultValue(fd.Default(), fd.DefaultEnumValue(), fd.Kind(), GoTag)
-		tag = append(tag, "def="+def)
-	}
-	return strings.Join(tag, ",")
+	return t, nil
 }
 
-func marshallDefaultValue(v protoreflect.Value, ev protoreflect.EnumValueDescriptor, k protoreflect.Kind, f Format) (string, error) {
-	switch k {
-	case protoreflect.BoolKind:
-		if f == GoTag {
-			if v.Bool() {
-				return "1", nil
-			} else {
-				return "0", nil
-			}
-		} else {
-			if v.Bool() {
-				return "true", nil
-			} else {
-				return "false", nil
-			}
+func ExpandComments(comment string) [][2]string {
+	lines := strings.FieldsFunc(comment, func(r rune) bool {
+		return r == '\r' || r == '\n'
+	})
+
+	out := make([][2]string, 0)
+
+	for _, line := range lines {
+		str := Trim(line)
+		segments := strings.Split(str, " ")
+		if len(segments) <= 1 {
+			continue
 		}
-	case protoreflect.EnumKind:
-		if f == GoTag {
-			return strconv.FormatInt(int64(v.Enum()), 10), nil
-		} else {
-			return string(ev.Name()), nil
-		}
-	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind, protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
-		return strconv.FormatInt(v.Int(), 10), nil
-	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind, protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
-		return strconv.FormatUint(v.Uint(), 10), nil
-	case protoreflect.FloatKind, protoreflect.DoubleKind:
-		f := v.Float()
-		switch {
-		case math.IsInf(f, -1):
-			return "-inf", nil
-		case math.IsInf(f, +1):
-			return "inf", nil
-		case math.IsNaN(f):
-			return "nan", nil
-		default:
-			if k == protoreflect.FloatKind {
-				return strconv.FormatFloat(f, 'g', -1, 32), nil
-			} else {
-				return strconv.FormatFloat(f, 'g', -1, 64), nil
-			}
-		}
-	case protoreflect.StringKind:
-		// String values are serialized as is without any escaping.
-		return v.String(), nil
-	case protoreflect.BytesKind:
-		if s, ok := marshalBytes(v.Bytes()); ok {
-			return s, nil
+		if strings.HasPrefix(segments[0], "@") {
+			out = append(out, [2]string{segments[0], strings.Join(segments[1:], " ")})
 		}
 	}
-	return "", fmt.Errorf("could not format value for %v: %v", k, v)
+	return out
 }
 
-func marshalBytes(b []byte) (string, bool) {
-	var s []byte
-	for _, c := range b {
-		switch c {
-		case '\n':
-			s = append(s, `\n`...)
-		case '\r':
-			s = append(s, `\r`...)
-		case '\t':
-			s = append(s, `\t`...)
-		case '"':
-			s = append(s, `\"`...)
-		case '\'':
-			s = append(s, `\'`...)
-		case '\\':
-			s = append(s, `\\`...)
-		default:
-			if printableASCII := c >= 0x20 && c <= 0x7e; printableASCII {
-				s = append(s, c)
-			} else {
-				s = append(s, fmt.Sprintf(`\%03o`, c)...)
-			}
-		}
-	}
-	return string(s), true
+func Trim(str string) string {
+	out := strings.TrimRightFunc(str, func(r rune) bool {
+		return r == ' ' || r == '\r'
+	})
+	out = strings.TrimLeft(out, " ")
+
+	return out
 }
 
-func GetReflectedKind(k protoreflect.Kind) reflect.Kind {
-	switch k {
-	case protoreflect.BoolKind:
-		{
-			return reflect.Bool
-		}
-	case protoreflect.EnumKind:
-		{
-			return reflect.Int
-		}
-	case protoreflect.Int32Kind:
-		{
-			return reflect.Int
-		}
-	case protoreflect.Sint32Kind:
-		{
-			return reflect.Int
-		}
-	case protoreflect.Uint32Kind:
-		{
-			return reflect.Uint
-		}
-	case protoreflect.Int64Kind:
-		{
-			return reflect.Int64
-		}
-	case protoreflect.Sint64Kind:
-		{
-			return reflect.Int64
-		}
-	case protoreflect.Uint64Kind:
-		{
-			return reflect.Uint64
-		}
-	case protoreflect.Sfixed32Kind:
-		{
-			return reflect.Int
-		}
-	case protoreflect.Fixed32Kind:
-		{
-			return reflect.Int
-		}
-	case protoreflect.FloatKind:
-		{
-			return reflect.Float32
-		}
-	case protoreflect.Sfixed64Kind:
-		{
-			return reflect.Int64
-		}
-	case protoreflect.Fixed64Kind:
-		{
-			return reflect.Int64
-		}
-	case protoreflect.DoubleKind:
-		{
-			return reflect.Float64
-		}
-	case protoreflect.StringKind:
-		{
-			return reflect.String
-		}
-	case protoreflect.BytesKind:
-		{
-			return reflect.Array
-		}
-	case protoreflect.MessageKind:
-		{
-			return reflect.Struct
-		}
-	default:
-		{
-			return reflect.Invalid
+func GetComments(protodesc *descriptorpb.FileDescriptorProto, file linker.File) map[string]string {
+	out := make(map[string]string)
+	for _, i := range protodesc.SourceCodeInfo.Location {
+		if i.LeadingComments != nil {
+			path := file.SourceLocations().ByPath(i.Path).Path.String()
+			value := strings.TrimRight(*i.LeadingComments, "\r\n")
+			value = strings.TrimRight(value, " ")
+			value = strings.TrimLeft(value, " ")
+			out[path] = value
 		}
 	}
-}
-
-func GetName(str string) string {
-	segments := strings.Split(str, "_")
-	for i, value := range segments {
-		x := []byte(value)
-		x[0] = byte(unicode.ToUpper(rune(x[0])))
-		segments[i] = string(x)
-	}
-	return strings.Join(segments, "")
+	return out
 }

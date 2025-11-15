@@ -1,0 +1,67 @@
+{{- define "EncodeMap"}}
+i := 0
+for key, value := range x.{{.Name}} {
+    if i != 0 {
+        buffer.Write(field.Tag)
+    }
+    i++
+    innerBuffer := memory.Alloc(0)
+    innerBuffer.Write(field.KeyTag)
+    {{template "EncodeMapKey" .}}
+    innerBuffer.Write(field.ValueTag)
+    {{template "EncodeMapValue" .}}
+
+    bytes := pdk.BufferEncode(innerBuffer)
+    bytes.WriteTo(buffer)
+    memory.Dealloc(innerBuffer)
+    memory.Dealloc(bytes)
+}
+return nil
+{{- end}}
+
+{{- define "EncodeMapKey"}}
+    {{- if eq .Key 1}}
+        pdk.BoolInlineEncode(key, innerBuffer)
+    {{- else if or (eq .Key 2) (eq .Key 3) (eq .Key 4) (eq .Key 5) (eq .Key 6)}}
+        pdk.SignedNumberInlineEncoder(int64(key), field.Tags.Protobuf.WireType, innerBuffer)
+    {{- else if or (eq .Key 7) (eq .Key 8) (eq .Key 9) (eq .Key 10) (eq .Key 11)}}
+        pdk.UnsignedNumberInlineEncoder(int64(key), field.Tags.Protobuf.WireType, innerBuffer)
+    {{- else if eq .Key 13}}
+        pdk.Float32InlineEncode(float32(key), innerBuffer)  
+    {{- else if eq .Key 14}}
+        pdk.Float64InlineEncode(float64(key), innerBuffer)    
+    {{- else if eq .Key 24}}
+        pdk.StringInlineEncode(key, innerBuffer)         
+    {{- else}}
+        return fmt.Errorf("unsupported key type %T", key)
+    {{- end}}
+{{- end}}
+
+{{- define "EncodeMapValue"}}
+    {{- if eq .Index 1}}
+        pdk.BoolInlineEncode(value, innerBuffer)
+    {{- else if or (eq .Index 2) (eq .Index 3) (eq .Index 4) (eq .Index 5) (eq .Index 6)}}
+        pdk.SignedNumberInlineEncoder(int64(value), field.Tags.Protobuf.WireType, innerBuffer)
+    {{- else if or (eq .Index 7) (eq .Index 8) (eq .Index 9) (eq .Index 10) (eq .Index 11)}}
+        pdk.UnsignedNumberInlineEncoder(int64(value), field.Tags.Protobuf.WireType, innerBuffer)
+    {{- else if eq .Index 13}}
+        pdk.Float32InlineEncode(float32(value), innerBuffer)
+    {{- else if eq .Index 14}}
+        pdk.Float64InlineEncode(float64(value), innerBuffer)   
+    {{- else if eq .Index 24}}
+        pdk.StringInlineEncode(value, innerBuffer)
+    {{- else if eq .Index 25}}
+        {
+            v, err := protolizer.StaticCodec().InlineMarshal(value)
+            if err != nil {
+                return err
+            }
+            bytes := pdk.BufferEncode(v)
+            memory.Dealloc(v)
+            bytes.WriteTo(innerBuffer)
+            memory.Dealloc(bytes)  
+        }
+    {{- else}}
+        return fmt.Errorf("unsupported value type %T", value)
+    {{- end}}
+{{- end}}

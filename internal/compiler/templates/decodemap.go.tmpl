@@ -1,0 +1,122 @@
+{{- define "DecodeMap"}}
+x.Metadata = make(map[string]string)
+i := 0
+for {
+    if i != 0 {
+        i, _, read, err := pdk.TagPeek(buffer)
+        if err != nil {
+            if err == io.EOF {
+                return nil
+            }
+            return err
+        }
+        if i != int32(field.Tags.Protobuf.FieldNum) {
+            break
+        }
+        read()
+    }
+    i++
+    bytes, err := pdk.BytesDecode(buffer)
+    if err != nil {
+        return nil
+    }
+    innerBuffer := memory.Alloc(0)
+    innerBuffer.Write(bytes)
+    _, _, err = pdk.TagDecode(innerBuffer)
+    if err != nil {
+        memory.Dealloc(innerBuffer)
+        return err
+    }
+
+    {{template "DecodeMapKey" .}}
+    
+    _, _, err = pdk.TagDecode(innerBuffer)
+    if err != nil {
+        memory.Dealloc(innerBuffer)
+        return err
+    }
+
+    {{template "DecodeMapValue" .}}
+    
+    x.{{.Name}}[{{.KeyBaseType}}(key)] = {{.IndexBaseType}}(value)
+    memory.Dealloc(innerBuffer)
+}
+return nil
+{{- end}}
+
+{{- define "DecodeMapKey"}}
+    {{- if eq .Key 1}}
+        key, err := pdk.BoolDecode(innerBuffer)
+        if err != nil {
+            return err
+        }
+    {{- else if or (eq .Key 2) (eq .Key 3) (eq .Key 4) (eq .Key 5) (eq .Key 6)}}
+        key, err := pdk.SignedNumberDecoder(field.Tags.Protobuf.WireType, innerBuffer)
+        if err != nil {
+            return err
+        }
+    {{- else if or (eq .Key 7) (eq .Key 8) (eq .Key 9) (eq .Key 10) (eq .Key 11)}}
+        key, err := pdk.UnsignedNumberDecoder(field.Tags.Protobuf.WireType, innerBuffer)
+        if err != nil {
+            return err
+        }
+    {{- else if eq .Key 13}}
+        key, err := pdk.Float32Decode(innerBuffer)
+        if err != nil {
+            return err
+        }    
+    {{- else if eq .Key 14}}
+        key, err := pdk.Float64Decoder(innerBuffer)
+        if err != nil {
+            return err
+        }     
+    {{- else if eq .Key 24}}
+        key, err := pdk.StringDecode(innerBuffer)
+        if err != nil {
+            return err
+        }            
+    {{- else}}
+        return fmt.Errorf("unsupported key type %T", key})
+    {{- end}}
+{{- end}}
+
+{{- define "DecodeMapValue"}}
+    {{- if eq .Index 1}}
+        value, err := pdk.BoolDecode(innerBuffer)
+        if err != nil {
+            return err
+        }
+    {{- else if or (eq .Index 2) (eq .Index 3) (eq .Index 4) (eq .Index 5) (eq .Index 6)}}
+        value, err := pdk.SignedNumberDecoder(field.Tags.Protobuf.WireType, innerBuffer)
+        if err != nil {
+            return err
+        }
+    {{- else if or (eq .Index 7) (eq .Index 8) (eq .Index 9) (eq .Index 10) (eq .Index 11)}}
+        value, err := pdk.UnsignedNumberDecoder(field.Tags.Protobuf.WireType, innerBuffer)
+        if err != nil {
+            return err
+        }
+    {{- else if eq .Index 13}}
+        value, err := pdk.Float32Decode(innerBuffer)
+        if err != nil {
+            return err
+        }    
+    {{- else if eq .Index 14}}
+        value, err := pdk.Float64Decode(innerBuffer)
+        if err != nil {
+            return err
+        }     
+    {{- else if eq .Index 24}}
+        value, err := pdk.StringDecode(innerBuffer)
+        if err != nil {
+            return err
+        }  
+    {{- else if eq .Index 25}}
+        value := new({{.BaseType}})
+        if err := protolizer.StaticCodec().UnmarshalFromBuffer(value, innerBuffer); err != nil {
+            return err
+        }  
+    {{- else}}
+        return fmt.Errorf("unsupported value type %T", value})
+    {{- end}}
+{{- end}}

@@ -1,28 +1,23 @@
 package compiler
 
 import (
-	"bytes"
 	"os"
+	"os/exec"
 	"testing"
-	"text/template"
 )
 
 func TestCompile(t *testing.T) {
-	res, err := Compile("C:\\Users\\Pouya\\Desktop\\lab\\protolizer\\proto2\\test.proto")
+	res, err := Parse("C:\\Users\\Pouya\\Desktop\\New folder\\users\\service.proto")
 	if err != nil {
-		t.FailNow()
+		t.Fatal(err)
 	}
-	tmpl, err := template.ParseFiles(`C:\Users\Pouya\Desktop\lab\protov\internal\compiler\microservice\templates\message.go.tmpl`, `C:\Users\Pouya\Desktop\lab\protov\internal\compiler\microservice\templates\test.go.tmpl`)
+	_r, err := Compile(res.Files[0])
 	if err != nil {
-		t.FailNow()
+		t.Fatal(err)
 	}
-	var out bytes.Buffer
-	err = tmpl.ExecuteTemplate(&out, "Main", res.Files[0])
-	if err != nil {
-		t.FailNow()
-	}
-	_r := out.String()
 	os.WriteFile("test.go", []byte(_r), os.ModePerm)
+	cmd := exec.Command("gofmt", "-w", "test.go")
+	cmd.Run()
 }
 
 // func TestT(t *testing.T) {

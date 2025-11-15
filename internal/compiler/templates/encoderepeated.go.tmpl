@@ -1,0 +1,118 @@
+{{- define "EncodeRepeated"}}
+    {{- if eq .Index 8}}
+        {{template "EncodeBytes" .}}
+    {{- else if eq .Index 1}}
+        {{template "EncodeRepeatedBool" .}}
+    {{- else if or (eq .Index 2) (eq .Index 3) (eq .Index 4) (eq .Index 5) (eq .Index 6)}}
+        {{template "EncodeRepeatedSigned" .}}
+    {{- else if or (eq .Index 7) (eq .Index 9) (eq .Index 10) (eq .Index 11)}}
+        {{template "EncodeRepeatedUnsigned" .}}
+    {{- else if eq .Index 13}}
+        {{template "EncodeRepeatedFloat32" .}}
+    {{- else if eq .Index 14}}
+        {{template "EncodeRepeatedFloat64" .}}
+    {{- else if eq .Index 24}}
+        {{template "EncodeRepeatedString" .}}
+    {{- else if eq .Index 25}}
+        {{template "EncodeRepeatedMessage" .}}
+    {{- else}}
+        return fmt.Errorf("unsupported index type %T", x.{{.Name}})
+    {{- end}}
+{{- end}}
+
+{{- define "EncodeBytes"}}
+data, err := pdk.EncodeBytes(int64({{if eq .Optional true}}*{{end}}x.{{.Name}}), field.Tags.Protobuf.WireType)
+defer memory.Dealloc(data)
+if err != nil {
+    return err
+}
+data.WriteTo(buffer)
+return nil
+{{- end}}
+
+{{- define "EncodeRepeatedBool"}}
+innerBuffer := memory.Alloc(0)
+defer memory.Dealloc(innerBuffer)
+for _, value := range x.{{.Name}} {
+    pdk.BoolInlineEncode(value, innerBuffer)
+}
+bytes := pdk.BufferEncode(innerBuffer)
+bytes.WriteTo(buffer)
+memory.Dealloc(bytes)
+return nil
+{{- end}}
+
+{{- define "EncodeRepeatedSigned"}}
+innerBuffer := memory.Alloc(0)
+defer memory.Dealloc(innerBuffer)
+for _, value := range x.{{.Name}} {
+    pdk.SignedNumberInlineEncoder(int64(value), field.Tags.Protobuf.WireType, innerBuffer)
+}
+bytes := pdk.BufferEncode(innerBuffer)
+bytes.WriteTo(buffer)
+memory.Dealloc(bytes)
+return nil
+{{- end}}
+
+{{- define "EncodeRepeatedUnsigned"}}
+innerBuffer := memory.Alloc(0)
+defer memory.Dealloc(innerBuffer)
+for _, value := range x.{{.Name}} {
+    pdk.UnsignedNumberInlineEncoder(uint64(value), ffield.Tags.Protobuf.WireTypeield, innerBuffer)
+}
+bytes := pdk.BufferEncode(innerBuffer)
+bytes.WriteTo(buffer)
+memory.Dealloc(bytes)
+return nil
+{{- end}}
+
+{{- define "EncodeRepeatedFloat32"}}
+innerBuffer := memory.Alloc(0)
+defer memory.Dealloc(innerBuffer)
+for _, value := range x.{{.Name}} {
+    pdk.Float32InlineEncode(value, innerBuffer)
+}
+bytes := pdk.BufferEncode(innerBuffer)
+bytes.WriteTo(buffer)
+pdk.Dealloc(bytes)
+return nil
+{{- end}}
+
+{{- define "EncodeRepeatedFloat64"}}
+innerBuffer := memory.Alloc(0)
+defer memory.Dealloc(innerBuffer)
+for _, value := range x.{{.Name}} {
+    pdk.Float64InlineEncode(value, innerBuffer)
+}
+bytes := pdk.BufferEncode(innerBuffer)
+bytes.WriteTo(buffer)
+memory.Dealloc(bytes)
+return nil
+{{- end}}
+
+{{- define "EncodeRepeatedString"}}
+for i, x := range x.{{.Name}} {
+    if i != 0 {
+        buffer.Write(field.Tag)
+    }
+    pdk.StringInlineEncode(x, buffer)
+}
+return nil
+{{- end}}
+
+{{- define "EncodeRepeatedMessage"}}
+for i, value := range x.{{.Name}} {
+    if i != 0 {
+        buffer.Write(field.Tag)
+    }
+    data, err := protolizer.StaticCodec().InlineMarshal(&value)
+    if err != nil {
+        return err
+    }
+    bytes := pdk.BufferEncode(data)
+    bytes.WriteTo(buffer)
+    memory.Dealloc(data)
+    memory.Dealloc(bytes)
+}
+return nil
+{{- end}}

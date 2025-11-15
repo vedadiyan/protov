@@ -1,0 +1,163 @@
+{{- define "Service"}}
+{{- range $service := .Services }}
+  type {{$service.Name}}Headers = map[string][]string
+
+  type {{$service.Name}}Transport[T any] = struct {
+    Data T
+    Headers {{$service.Name}}Headers
+  }
+
+  type {{$service.Name}}ServiceOptions struct {
+    Options struct {
+      {{- template "parseMap" $service.Options }}
+    }
+  }
+
+  type {{$service.Name}}RpcOptions struct {
+    Name string
+    Options struct {
+      {{- template "parseMap" $service.RpcOptions }}
+    }
+  }
+
+  type {{$service.Name}}HandlerOptions struct{
+    ServiceOptions {{$service.Name}}ServiceOptions
+    RpcOptions {{$service.Name}}RpcOptions
+  }
+
+  type {{$service.Name}}Server interface {
+    Start({{$service.Name}}ServiceOptions) error
+    Stop() error
+    Handle({{$service.Name}}HandlerOptions, func(context.Context, *{{$service.Name}}Transport[[]byte])(*{{$service.Name}}Transport[[]byte], error)) error
+  }
+
+  type {{$service.Name}}Service interface {
+      {{- range $rpc := $service.Rpcs}}
+      {{$rpc.Name}}(context.Context, *{{$service.Name}}Transport[*{{$rpc.Input}}], {{$service.Name}}RpcOptions) (*{{$service.Name}}Transport[*{{$rpc.Output}}], error)
+      {{- end }}
+  }        
+
+  func Get{{$service.Name}}ServiceOptions() *{{$service.Name}}ServiceOptions {
+      return &{{$service.Name}}ServiceOptions{ 
+        Options: struct { 
+          {{- template "parseMap" $service.Options }} 
+        } {
+            {{- template "parseMapValues" $service.Options }}
+          },
+      }
+    }
+
+  {{- range $rpc := $service.Rpcs}}
+    func Get{{$service.Name}}{{$rpc.Name}}RpcOptions() *{{$service.Name}}RpcOptions {
+      return &{{$service.Name}}RpcOptions{ 
+        Name: "{{$rpc.Name}}",
+        Options: struct { 
+          {{- template "parseMap" $rpc.Options }} 
+        } {
+            {{- template "parseMapValues" $rpc.Options }}
+          },
+      }
+    }
+  {{- end }}
+
+  func Build{{$service.Name}}(server {{$service.Name}}Server, service {{$service.Name}}Service) {
+      {{- range $rpc := $service.Rpcs}}
+        {{$service.Name}}HandlerOptions := {{$service.Name}}HandlerOptions {
+          ServiceOptions: *Get{{$service.Name}}ServiceOptions(),
+          RpcOptions:  *Get{{$service.Name}}{{$rpc.Name}}RpcOptions(),
+        }
+        if err := server.Handle({{$service.Name}}HandlerOptions, func(ctx context.Context, in *{{$service.Name}}Transport[[]byte])(*{{$service.Name}}Transport[[]byte], error) {
+          var req {{$rpc.Input}}
+          if err := protolizer.StaticCodec().Unmarshal(in.Data, &req); err != nil {
+            return nil, err
+          }
+          res, err := service.{{$rpc.Name}}(ctx, &{{$service.Name}}Transport[*{{$rpc.Input}}] {&req, in.Headers} , {{$service.Name}}HandlerOptions.RpcOptions)
+          if err != nil {
+            return nil, err
+          }
+          out, err := protolizer.StaticCodec().Marshal(res.Data)
+          if err != nil {
+            return nil, err
+          }
+          return &{{$service.Name}}Transport[[]byte] {out, res.Headers}, nil
+        }); err != nil {
+          panic(err)
+        }
+        
+      {{- end }}
+  }
+
+{{- end }}
+{{- end }}
+
+{{- define "parseMap" -}}
+  {{- range $key, $value := . }}
+    {{- if eq (printf "%T" $value) "map[string]interface {}" }}
+      {{$key}} struct {
+        {{- template "parseMap" $value }}
+      }
+    {{- else if eq (printf "%T" $value) "[]interface {}" }}
+      {{$key}} []{{template "parseType" (index $value 0)}}
+    {{- else }}
+      {{- if eq (printf "%T" $value) "compiler.ByteString" }}
+         {{$key}} string
+      {{- else }}
+        {{$key}} {{(printf "%T" $value)}}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+{{- define "parseType" -}}
+  {{- if eq (printf "%T" .) "map[string]interface {}" -}}
+    struct {
+      {{- template "parseMap" . }}
+    }
+  {{- else if eq (printf "%T" .) "compiler.ByteString" -}}
+    string
+  {{- else -}}
+    {{printf "%T" .}}
+  {{- end -}}
+{{- end }}
+
+{{- define "parseMapValues" -}}
+  {{- range $key, $value := . }}
+    {{- if eq (printf "%T" $value) "map[string]interface {}" }}
+       {{$key}}: struct {
+         {{- template "parseMap" $value }} 
+        } { 
+          {{- template "parseMapValues" $value }} 
+        },
+    {{- else if eq (printf "%T" $value) "[]interface {}" }}
+       {{$key}}: []{{template "parseType" (index $value 0)}}{ 
+          {{- template "parseSliceValues" $value -}}
+       },
+    {{- else }}
+      {{- if eq (printf "%T" $value) "string" }}
+        {{$key}}: "{{$value}}",
+      {{- else if eq (printf "%T" $value) "compiler.ByteString" }}
+        {{$key}}: string({{$value}}),
+      {{- else }}
+        {{$key}}: {{$value}},
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+{{- define "parseSliceValues" -}}
+  {{- range $index, $element := . }}
+    {{- if eq (printf "%T" $element) "map[string]interface {}" }}
+      struct {
+        {{- template "parseMap" $element }}
+      }{
+        {{- template "parseMapValues" $element }}
+      },
+    {{- else if eq (printf "%T" $element) "string" }}
+      "{{$element}}",
+    {{- else if eq (printf "%T" $element) "compiler.ByteString" }}
+      string({{$element}}),
+    {{- else }}
+      {{$element}},
+    {{- end }}
+  {{- end }}
+{{- end }}
