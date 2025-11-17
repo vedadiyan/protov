@@ -77,6 +77,11 @@ type (
 	}
 )
 
+func (mod *Module) Run() error {
+	flaggy.PrintHelp()
+	return nil
+}
+
 func (c *Config) Validate() error {
 	if len(c.Modules) == 0 {
 		return fmt.Errorf("%w: no modules defined", ErrInvalidConfig)
@@ -154,7 +159,7 @@ func (mi *ModuleInit) createDefaultConfig() *Config {
 				Mod:         "org/com/app",
 				GoVersion:   strings.TrimPrefix(runtime.Version(), "go"),
 				Dependencies: []string{
-					"github.com/vedadiyan/protolizer",
+					"github.com/vedadiyan/protolizer v0.0.1",
 				},
 				Environment: map[string]string{
 					"GOOS":   runtime.GOOS,
@@ -498,6 +503,10 @@ func buildBinary(module ModuleConfig) error {
 
 	if err := setEnvironment(module.Environment); err != nil {
 		return err
+	}
+
+	if err := Exec("go", module.Destination, "mod", "tidy"); err != nil {
+		return fmt.Errorf("%w: %v", ErrBuildFailed, err)
 	}
 
 	if err := Exec("go", module.Destination, buildArgs...); err != nil {
