@@ -100,6 +100,6 @@ value := new({{.BaseType}})
 if err := protolizer.StaticCodec().UnmarshalFromBuffer(value, buffer); err != nil {
     return err
 }     
-x.{{.Name}} = {{- if eq .Optional true}}&{{end}}value    
+x.{{.Name}} = value    
 return nil
 {{- end}}

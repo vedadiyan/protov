@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package protov;
+
+option go_package = "autogen/options/rpc";
+
+import "google/protobuf/any.proto";
+import "google/protobuf/descriptor.proto";
+
+message Params {
+    map<string, google.protobuf.Any> params = 1;
+}
+
+message Definition {
+    string type = 1;
+    map<string, google.protobuf.Any> params = 2;
+}
+
+extend google.protobuf.ServiceOptions {
+    string service_prefix = 10000;    
+    Params service_params = 10002;
+}
+
+extend google.protobuf.MethodOptions {
+    string method_alias = 10000;
+    Definition method_definition = 10001;
+    Params method_params = 10003;
+}
+
