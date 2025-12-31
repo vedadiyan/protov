@@ -1,0 +1,143 @@
+{{- define "Service"}}
+{{- range $service := .Services }}
+   type {{$service.Name}}Service interface {
+      {{- range $rpc := $service.Rpcs}}
+        {{$rpc.Name}}(context.Context, *{{$rpc.Input}}) (*{{$rpc.Output}}, error)
+      {{- end }}
+   } 
+ 
+  type {{$service.Name}}Controller struct {
+      gtw.Metadata {{ if $tag := index $service.Options "Tags" }} `{{$tag}}` {{ end }}
+
+      {{$service.Name}}Service gtw.Service[{{$service.Name}}Service] 
+      
+      {{- range $rpc := $service.Rpcs}}
+        {{$rpc.Name}} gtw.MessageHandler {{ if $tag := index $rpc.Options "Tags" }} `{{$tag}}` {{ end }}
+      {{- end }}
+  }
+
+  {{- range $rpc := $service.Rpcs}}
+    func (x *{{$service.Name}}Controller) {{$rpc.Name}}Handler(msg gtw.Message) (gtw.Message, error) {
+      service := x.{{$service.Name}}Service.ValueOrNil()
+      if service == nil {
+        return gtw.Error(fmt.Errorf("could not resolve service 'x.{{$service.Name}}Service'"))
+      }
+      var req {{$rpc.Input}}
+      if err := protolizer.StaticCodec().Unmarshal(msg.Data, &req); err != nil {
+        return gtw.Error(err)
+      }
+
+      res, err := service.{{$rpc.Name}}(context.TODO(), req)
+      if err != nil { 
+        return gtw.Error(err)
+      }
+
+      out, err := protolizer.StaticCodec().Marshal(res.Data)
+      if err != nil {
+        return nil, err
+      }
+
+      return gtw.Ok(gtw.Protobuf(out))
+    }
+  {{- end }}
+
+  type {{$service.Name}}ServiceOptions struct {
+    Options struct {
+      {{- template "parseMap" $service.Options }}
+    }
+  }
+
+  type {{$service.Name}}RpcOptions struct {
+    Name string
+    Options struct {
+      {{- template "parseMap" $service.RpcOptions }}
+    }
+  }
+
+  {{- range $rpc := $service.Rpcs}}
+    func Get{{$service.Name}}{{$rpc.Name}}RpcOptions() *{{$service.Name}}RpcOptions {
+      return &{{$service.Name}}RpcOptions{ 
+        Name: "{{$rpc.Name}}",
+        Options: struct { 
+          {{- template "parseMap" $rpc.Options }} 
+        } {
+            {{- template "parseMapValues" $rpc.Options }}
+          },
+      }
+    }
+  {{- end }}
+
+{{- end }}
+{{- end }}
+
+{{- define "parseMap" -}}
+  {{- range $key, $value := . }}
+    {{- if eq (printf "%T" $value) "map[string]interface {}" }}
+      {{$key}} struct {
+        {{- template "parseMap" $value }}
+      }
+    {{- else if eq (printf "%T" $value) "[]interface {}" }}
+      {{$key}} []{{template "parseType" (index $value 0)}}
+    {{- else }}
+      {{- if eq (printf "%T" $value) "compiler.ByteString" }}
+         {{$key}} string
+      {{- else }}
+        {{$key}} {{(printf "%T" $value)}}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+{{- define "parseType" -}}
+  {{- if eq (printf "%T" .) "map[string]interface {}" -}}
+    struct {
+      {{- template "parseMap" . }}
+    }
+  {{- else if eq (printf "%T" .) "compiler.ByteString" -}}
+    string
+  {{- else -}}
+    {{printf "%T" .}}
+  {{- end -}}
+{{- end }}
+
+{{- define "parseMapValues" -}}
+  {{- range $key, $value := . }}
+    {{- if eq (printf "%T" $value) "map[string]interface {}" }}
+       {{$key}}: struct {
+         {{- template "parseMap" $value }} 
+        } { 
+          {{- template "parseMapValues" $value }} 
+        },
+    {{- else if eq (printf "%T" $value) "[]interface {}" }}
+       {{$key}}: []{{template "parseType" (index $value 0)}}{ 
+          {{- template "parseSliceValues" $value -}}
+       },
+    {{- else }}
+      {{- if eq (printf "%T" $value) "string" }}
+        {{$key}}: "{{$value}}",
+      {{- else if eq (printf "%T" $value) "compiler.ByteString" }}
+        {{$key}}: string({{$value}}),
+      {{- else }}
+        {{$key}}: {{$value}},
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+{{- define "parseSliceValues" -}}
+  {{- range $index, $element := . }}
+    {{- if eq (printf "%T" $element) "map[string]interface {}" }}
+      struct {
+        {{- template "parseMap" $element }}
+      }{
+        {{- template "parseMapValues" $element }}
+      },
+    {{- else if eq (printf "%T" $element) "string" }}
+      "{{$element}}",
+    {{- else if eq (printf "%T" $element) "compiler.ByteString" }}
+      string({{$element}}),
+    {{- else }}
+      {{$element}},
+    {{- end }}
+  {{- end }}
+{{- end }}
