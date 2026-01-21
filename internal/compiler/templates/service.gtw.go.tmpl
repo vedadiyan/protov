@@ -1,5 +1,10 @@
 {{- define "Service"}}
 {{- range $service := .Services }}
+  type {{$service.Name}}Codec interface { 
+    Marshal(any) ([]byte, error)
+    Unmarshal([]byte, any) error
+  }
+
    type {{$service.Name}}Service interface {
       {{- range $rpc := $service.Rpcs}}
         {{$rpc.Name}}(context.Context, *{{$rpc.Input}}) (*{{$rpc.Output}}, error)
@@ -10,7 +15,8 @@
       gtw.Metadata {{ if $tag := index $service.Options "Tags" }} `{{$tag}}` {{ end }}
 
       {{$service.Name}}Service gtw.Service[{{$service.Name}}Service] 
-      
+      {{$service.Name}}Codec gtw.Service[{{$service.Name}}Codec]
+
       {{- range $rpc := $service.Rpcs}}
         {{$rpc.Name}} gtw.MessageHandler {{ if $tag := index $rpc.Options "Tags" }} `{{$tag}}` {{ end }}
       {{- end }}
@@ -22,8 +28,14 @@
       if service == nil {
         return gtw.Error(fmt.Errorf("could not resolve service 'x.{{$service.Name}}Service'"))
       }
+
+      codec := x.{{$service.Name}}Codec.ValueOrNil()
+      if codec == nil {
+        return gtw.Error(fmt.Errorf("could not resolve service 'x.{{$service.Name}}Codec'"))
+      }
+
       var req {{$rpc.Input}}
-      if err := protolizer.StaticCodec().Unmarshal(msg.Data, &req); err != nil {
+      if err := codec.Unmarshal(msg.Data, &req); err != nil {
         return gtw.Error(err)
       }
 
@@ -32,7 +44,7 @@
         return gtw.Error(err)
       }
 
-      out, err := protolizer.StaticCodec().Marshal(res.Data)
+      out, err := codec.Marshal(res.Data)
       if err != nil {
         return nil, err
       }
