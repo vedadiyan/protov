@@ -34,17 +34,22 @@
         return gtw.Error(fmt.Errorf("could not resolve service 'x.{{$service.Name}}Codec'"))
       }
 
-      var req {{$rpc.Input}}
-      if err := codec.Unmarshal(msg.Data, &req); err != nil {
+      data, err := io.ReadAll(msg)
+      if err != nil {
         return gtw.Error(err)
       }
 
-      res, err := service.{{$rpc.Name}}(context.TODO(), req)
+      var req {{$rpc.Input}}
+      if err := (*codec).Unmarshal(data, &req); err != nil {
+        return gtw.Error(err)
+      }
+
+      res, err := (*service).{{$rpc.Name}}(context.TODO(), &req)
       if err != nil { 
         return gtw.Error(err)
       }
 
-      out, err := codec.Marshal(res.Data)
+      out, err := (*codec).Marshal(res)
       if err != nil {
         return nil, err
       }

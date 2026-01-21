@@ -47,8 +47,10 @@ var (
 	_mainTemplate string
 	//go:embed templates/message.go.tmpl
 	_messageTemplate string
-	//go:embed templates/service.go.tmpl
+	//go:embed templates/service.gtw.go.tmpl
 	_serviceTemplate string
+	//go:embed templates/service.imports.go.tmpl
+	_serviceImportsTemplate string
 )
 
 type (
@@ -139,6 +141,7 @@ func Compile(file *File) ([]byte, error) {
 		_mainTemplate,
 		_messageTemplate,
 		_serviceTemplate,
+		_serviceImportsTemplate,
 	}
 	template := template.New("temp")
 	templates, err := parseTemplates(template, allTemplates...)
