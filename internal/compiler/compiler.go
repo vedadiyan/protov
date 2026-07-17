@@ -678,31 +678,64 @@ func getKind(fd protoreflect.FieldDescriptor) string {
 	var baseType string
 	switch fd.Kind() {
 	case protoreflect.BoolKind:
-		baseType = "bool"
+		{
+			baseType = "bool"
+		}
 	case protoreflect.EnumKind:
-		baseType = string(fd.Enum().Name())
+		{
+			baseType = string(fd.Enum().Name())
+		}
 	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind, protoreflect.Fixed32Kind:
-		baseType = "int"
+		{
+			baseType = "int"
+		}
 	case protoreflect.Uint32Kind:
-		baseType = "uint"
+		{
+			baseType = "uint"
+		}
 	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind, protoreflect.Fixed64Kind:
-		baseType = "int64"
+		{
+			baseType = "int64"
+		}
 	case protoreflect.Uint64Kind:
-		baseType = "uint64"
+		{
+			baseType = "uint64"
+		}
 	case protoreflect.FloatKind:
-		baseType = "float32"
+		{
+			baseType = "float32"
+		}
 	case protoreflect.DoubleKind:
-		baseType = "float64"
+		{
+			baseType = "float64"
+		}
 	case protoreflect.StringKind:
-		baseType = "string"
+		{
+			baseType = "string"
+		}
 	case protoreflect.BytesKind:
-		return "[]byte"
+		{
+			return "[]byte"
+		}
 	case protoreflect.MessageKind:
-		baseType = string(fd.Message().Name())
+		{
+			message := fd.Message()
+			packageName := fd.ParentFile().Package()
+			fullName := message.FullName()
+			if strings.HasPrefix(string(fullName), string(packageName)) {
+				baseType = string(message.Name())
+				break
+			}
+			baseType = string(message.FullName())
+		}
 	case protoreflect.GroupKind:
-		return "interface{}"
+		{
+			return "interface{}"
+		}
 	default:
-		return ""
+		{
+			return ""
+		}
 	}
 
 	return prefix + baseType
