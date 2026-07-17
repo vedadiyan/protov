@@ -117,6 +117,7 @@ type (
 		Source      string
 		Options     map[string]any
 		Messages    []*Message
+		Imports     map[string]bool
 		Services    []*Service
 		Enums       []*Enum
 		Comments    map[string]string
@@ -192,6 +193,7 @@ func Parse(file string) (*AST, error) {
 func GetFile(dir string, filePath string, file linker.File) (*File, error) {
 	out := &File{
 		Options: make(map[string]any),
+		Imports: make(map[string]bool),
 	}
 	out.Dir = dir
 	_, out.Source = path.Split(filePath)
@@ -324,6 +326,10 @@ func (file *File) GetMessage(message protoreflect.MessageDescriptor) (*Message, 
 
 func (file *File) GetField(fd protoreflect.FieldDescriptor) (*Field, error) {
 	fieldType := getKind(fd)
+
+	if isExternalPackage, packageName := getImport(fd); isExternalPackage {
+		file.Imports[packageName] = true
+	}
 
 	out := &Field{
 		Name:          toGoName(string(fd.Name())),
@@ -662,6 +668,24 @@ func cleanType(typ string) string {
 	return typ
 }
 
+func getImport(fd protoreflect.FieldDescriptor) (bool, string) {
+	if fd.Kind() != protoreflect.MessageKind {
+		return false, ""
+	}
+
+	message := fd.Message()
+
+	packageName := fd.ParentFile().Package()
+	fullName := message.FullName()
+	if strings.HasPrefix(string(fullName), string(packageName)) {
+		return false, ""
+	}
+	if opts, ok := message.ParentFile().Options().(*descriptorpb.FileOptions); ok {
+		return true, opts.GetGoPackage()
+	}
+	return false, ""
+}
+
 func getKind(fd protoreflect.FieldDescriptor) string {
 	if fd.IsMap() {
 		return fmt.Sprintf("map[%s]%s", getKind(fd.MapKey()), getKind(fd.MapValue()))
@@ -720,13 +744,12 @@ func getKind(fd protoreflect.FieldDescriptor) string {
 	case protoreflect.MessageKind:
 		{
 			message := fd.Message()
-			packageName := fd.ParentFile().Package()
-			fullName := message.FullName()
-			if strings.HasPrefix(string(fullName), string(packageName)) {
+			isExternalPackage, importPath := getImport(fd)
+			if !isExternalPackage {
 				baseType = string(message.Name())
-				break
 			}
-			baseType = string(message.FullName())
+			segement := strings.Split(importPath, "/")
+			return fmt.Sprintf("%s.%s", segement[len(segement)-1], string(message.Name()))
 		}
 	case protoreflect.GroupKind:
 		{

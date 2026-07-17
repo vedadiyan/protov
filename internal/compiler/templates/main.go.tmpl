@@ -18,6 +18,10 @@
         "github.com/vedadiyan/protolizer/pdk"
         "github.com/vedadiyan/protolizer/memory"
 
+        {{- range $import, $nothing := .Imports}}
+            "{{$import}}"
+        {{- end}}
+
         {{- template "ServiceImports" . }}
     )
 
