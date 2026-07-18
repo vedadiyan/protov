@@ -677,7 +677,7 @@ func getImport(fd protoreflect.FieldDescriptor) (bool, string) {
 
 	packageName := fd.ParentFile().Package()
 	fullName := message.FullName()
-	if strings.HasPrefix(string(fullName), string(packageName)) {
+	if string(fullName) == string(packageName) {
 		return false, ""
 	}
 	if opts, ok := message.ParentFile().Options().(*descriptorpb.FileOptions); ok {

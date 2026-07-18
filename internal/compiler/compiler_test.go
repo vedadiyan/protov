@@ -7,7 +7,7 @@ import (
 )
 
 func TestCompile(t *testing.T) {
-	res, err := Parse(`C:\Users\Pouya\Desktop\lab\prototyping\metadata.proto`)
+	res, err := Parse(`C:\Users\Pouya\Desktop\lab\mizzban\account.proto`)
 	if err != nil {
 		t.Fatal(err)
 	}
