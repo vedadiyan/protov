@@ -750,7 +750,7 @@ func getKind(fd protoreflect.FieldDescriptor) string {
 				baseType = string(message.Name())
 			}
 			segement := strings.Split(importPath, "/")
-			return fmt.Sprintf("%s.%s", segement[len(segement)-1], string(message.Name()))
+			baseType = fmt.Sprintf("%s.%s", segement[len(segement)-1], string(message.Name()))
 		}
 	case protoreflect.GroupKind:
 		{
