@@ -447,7 +447,7 @@ func compileProtoFiles(module ModuleConfig) ([]*compiler.File, error) {
 			return nil, fmt.Errorf("invalid proto file %q: %w", protoPath, err)
 		}
 
-		ast, err := CompileFile(protoPath, module.Destination)
+		ast, err := CompileFile(protoPath, module.Mod, module.Destination)
 		if err != nil {
 			return nil, fmt.Errorf("failed to compile %q: %w", protoPath, err)
 		}

@@ -82,7 +82,7 @@ func (c *Compile) compileFiles() error {
 }
 
 func (c *Compile) compileFile(protoPath string) error {
-	ast, err := CompileFile(protoPath, c.Output)
+	ast, err := CompileFile(protoPath, "", c.Output)
 	if err != nil {
 		return err
 	}

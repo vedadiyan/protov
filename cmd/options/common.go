@@ -266,7 +266,7 @@ func Format(dir, fileName string) error {
 	return nil
 }
 
-func CompileFile(protoPath, outputDir string) (*compiler.AST, error) {
+func CompileFile(protoPath, goModuleName, outputDir string) (*compiler.AST, error) {
 	if err := ValidateProtoFile(protoPath); err != nil {
 		return nil, fmt.Errorf("invalid proto file: %w", err)
 	}
@@ -285,7 +285,7 @@ func CompileFile(protoPath, outputDir string) (*compiler.AST, error) {
 	}
 
 	for _, file := range ast.Files {
-		if err := compileAndWriteFile(file, outputDir); err != nil {
+		if err := compileAndWriteFile(file, goModuleName, outputDir); err != nil {
 			return nil, fmt.Errorf("compilation error for %q: %w", file.FileName, err)
 		}
 
@@ -294,7 +294,7 @@ func CompileFile(protoPath, outputDir string) (*compiler.AST, error) {
 	return ast, nil
 }
 
-func compileAndWriteFile(file *compiler.File, outputDir string) error {
+func compileAndWriteFile(file *compiler.File, goModuleName, outputDir string) error {
 	compiled, err := compiler.Compile(file)
 	if err != nil {
 		return fmt.Errorf("compiler error: %w", err)
@@ -304,12 +304,14 @@ func compileAndWriteFile(file *compiler.File, outputDir string) error {
 		return ErrEmptyData
 	}
 
-	dir := filepath.Join(outputDir, file.FilePath)
+	localFilePath := strings.Replace(filepath.Clean(file.FilePath), filepath.Clean(goModuleName), "", 1)
+
+	dir := filepath.Join(outputDir, localFilePath)
 	if err := EnsureDirectory(dir, 0755); err != nil {
 		return err
 	}
 
-	fileName := SanitizeFilename(fmt.Sprintf("%s.pb.go", file.FileName))
+	fileName := SanitizeFilename(fmt.Sprintf("%s.pb.go", localFilePath))
 	if fileName == "" {
 		return ErrInvalidFilename
 	}
