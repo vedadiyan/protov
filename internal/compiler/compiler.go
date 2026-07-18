@@ -681,7 +681,8 @@ func getImport(fd protoreflect.FieldDescriptor) (bool, string) {
 		return false, ""
 	}
 	if opts, ok := message.ParentFile().Options().(*descriptorpb.FileOptions); ok {
-		return true, opts.GetGoPackage()
+		segments := strings.Split(opts.GetGoPackage(), ";")
+		return true, segments[0]
 	}
 	return false, ""
 }
