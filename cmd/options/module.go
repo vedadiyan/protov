@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"go/parser"
 	"go/token"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -358,6 +359,39 @@ func buildModule(module ModuleConfig, sourceOnly bool) error {
 		return fmt.Errorf("main generation failed: %w", err)
 	}
 
+	globalMap := make([]*compiler.File, 0)
+
+	var recursiveLoad func(map[string]*compiler.File)
+	recursiveLoad = func(imports map[string]*compiler.File) {
+		for _, file := range imports {
+			for _, value := range file.Imports {
+				globalMap = append(globalMap, value)
+				recursiveLoad(value.Imports)
+			}
+		}
+	}
+
+	for _, file := range files {
+		recursiveLoad(file.Imports)
+	}
+
+	for _, file := range globalMap {
+		log.Println(file.FileName)
+		if strings.HasPrefix(file.FilePath, module.Mod) {
+			continue
+		}
+		if err := compileAndWriteFile(file, module.Mod, fmt.Sprintf("%s/autogen", module.Destination), func(file *compiler.File) {
+			for key, value := range file.Imports {
+				if !strings.HasPrefix(key, module.Mod) {
+					delete(file.Imports, key)
+					file.Imports[fmt.Sprintf("%s/autogen/%s", module.Mod, key)] = value
+				}
+			}
+		}); err != nil {
+			return fmt.Errorf("compilation error for %q: %w", file.FileName, err)
+		}
+	}
+
 	if !sourceOnly {
 		if err := buildBinary(module); err != nil {
 			return fmt.Errorf("binary build failed: %w", err)
@@ -447,7 +481,14 @@ func compileProtoFiles(module ModuleConfig) ([]*compiler.File, error) {
 			return nil, fmt.Errorf("invalid proto file %q: %w", protoPath, err)
 		}
 
-		ast, err := CompileFile(protoPath, module.Mod, module.Destination)
+		ast, err := CompileFile(protoPath, module.Mod, module.Destination, func(file *compiler.File) {
+			for key, value := range file.Imports {
+				if !strings.HasPrefix(key, module.Mod) {
+					delete(file.Imports, key)
+					file.Imports[fmt.Sprintf("%s/autogen/%s", module.Mod, key)] = value
+				}
+			}
+		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to compile %q: %w", protoPath, err)
 		}

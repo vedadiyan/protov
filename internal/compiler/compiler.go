@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"fmt"
+	"log"
 	"maps"
 	"os"
 	"path"
@@ -117,17 +118,27 @@ type (
 		Source      string
 		Options     map[string]any
 		Messages    []*Message
-		Imports     map[string]bool
+		Imports     map[string]*File
 		Services    []*Service
 		Enums       []*Enum
 		Comments    map[string]string
 		FileName    string
+
+		imports map[string]bool
 	}
 
 	AST struct {
 		Files []*File
 	}
 )
+
+var (
+	_globalTrack map[string]*Field
+)
+
+func init() {
+	_globalTrack = make(map[string]*Field)
+}
 
 func Compile(file *File) ([]byte, error) {
 	allTemplates := []string{
@@ -193,7 +204,8 @@ func Parse(file string) (*AST, error) {
 func GetFile(dir string, filePath string, file linker.File) (*File, error) {
 	out := &File{
 		Options: make(map[string]any),
-		Imports: make(map[string]bool),
+		Imports: make(map[string]*File),
+		imports: make(map[string]bool),
 	}
 	out.Dir = dir
 	_, out.Source = path.Split(filePath)
@@ -327,10 +339,6 @@ func (file *File) GetMessage(message protoreflect.MessageDescriptor) (*Message, 
 func (file *File) GetField(fd protoreflect.FieldDescriptor) (*Field, error) {
 	fieldType := getKind(fd)
 
-	if isExternalPackage, packageName := getImport(fd); isExternalPackage {
-		file.Imports[packageName] = true
-	}
-
 	out := &Field{
 		Name:          toGoName(string(fd.Name())),
 		Type:          fieldType,
@@ -338,6 +346,30 @@ func (file *File) GetField(fd protoreflect.FieldDescriptor) (*Field, error) {
 		FieldNum:      int(fd.Number()),
 		Optional:      fd.HasOptionalKeyword(),
 		MarshalledTag: marshalTags(fd),
+	}
+
+	if isExternalPackage, packageName := getImport(fd); isExternalPackage {
+		if _, ok := file.imports[packageName]; !ok {
+			newFile := &File{}
+			newFile.Options = make(map[string]any)
+			newFile.Imports = make(map[string]*File)
+			newFile.imports = make(map[string]bool)
+			newFile.Dir = file.Dir
+			message, err := newFile.GetMessage(fd.Message())
+			if err != nil {
+				return nil, err
+			}
+			newFile.Messages = append(newFile.Messages, message)
+
+			if opts, ok := fd.Message().ParentFile().Options().(*descriptorpb.FileOptions); ok {
+				newFile.FilePath = strings.Split(opts.GetGoPackage(), ";")[0]
+				_, newFile.PackageName = path.Split(newFile.FilePath)
+				newFile.FileName = strings.ReplaceAll(strings.ToLower(string(fd.Message().Name())), ".proto", "")
+			}
+			log.Println("External Package", packageName)
+			file.Imports[packageName] = newFile
+			file.imports[packageName] = true
+		}
 	}
 
 	if opts, ok := fd.Options().(*descriptorpb.FieldOptions); ok {
@@ -680,11 +712,26 @@ func getImport(fd protoreflect.FieldDescriptor) (bool, string) {
 	if string(fullName) == string(packageName) {
 		return false, ""
 	}
+
+	log.Println("Package Name:", fullName, packageName)
 	if opts, ok := message.ParentFile().Options().(*descriptorpb.FileOptions); ok {
 		segments := strings.Split(opts.GetGoPackage(), ";")
 		return true, segments[0]
 	}
 	return false, ""
+}
+
+func canExlcudeImport(fd protoreflect.FieldDescriptor) bool {
+	if fd.Kind() != protoreflect.MessageKind {
+		return false
+	}
+
+	message := fd.Message()
+
+	packageName := fd.ParentFile().Package()
+	fullName := message.FullName()
+	return strings.HasPrefix(string(fullName), string(packageName))
+
 }
 
 func getKind(fd protoreflect.FieldDescriptor) string {
@@ -746,8 +793,9 @@ func getKind(fd protoreflect.FieldDescriptor) string {
 		{
 			message := fd.Message()
 			isExternalPackage, importPath := getImport(fd)
-			if !isExternalPackage {
+			if !isExternalPackage || canExlcudeImport(fd) {
 				baseType = string(message.Name())
+				break
 			}
 			segement := strings.Split(importPath, "/")
 			baseType = fmt.Sprintf("%s.%s", segement[len(segement)-1], string(message.Name()))
