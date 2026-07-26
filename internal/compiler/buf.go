@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -118,6 +119,20 @@ type Resolver struct {
 
 // NewResolver creates a new Resolver for the given directory.
 func NewResolver(dir string) *Resolver {
+	dir = filepath.Clean(dir)
+
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".root")); err == nil {
+			break
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+
 	r := &Resolver{Dir: dir}
 	r.Accessor = r.accessor
 	return r
@@ -129,7 +144,7 @@ func (r *Resolver) accessor(f string) (io.ReadCloser, error) {
 	cleanPath := strings.TrimPrefix(normalizedPath, r.Dir)
 	cleanPath = strings.TrimPrefix(cleanPath, "/")
 
-	filePath := path.Join(r.Dir, cleanPath)
+	filePath := filepath.Join(r.Dir, strings.TrimPrefix(f, r.Dir))
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {

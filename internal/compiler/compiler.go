@@ -755,7 +755,13 @@ func getKind(fd protoreflect.FieldDescriptor) string {
 		}
 	case protoreflect.EnumKind:
 		{
-			baseType = string(fd.Enum().Name())
+			isExternalPackage, importPath := getImport(fd)
+			if !isExternalPackage || canExlcudeImport(fd) {
+				baseType = string(fd.Enum().Name())
+				break
+			}
+			segement := strings.Split(importPath, "/")
+			baseType = fmt.Sprintf("%s.%s", segement[len(segement)-1], string(fd.Enum().Name()))
 		}
 	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind, protoreflect.Fixed32Kind:
 		{
