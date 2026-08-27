@@ -1,0 +1,83 @@
+{{- define "Service"}}
+{{- range $service := .Services }}
+  func init () {
+        {{- range $rpc := $service.Rpcs}}
+            if err := vrpc.RegisterHandler[{{$rpc.Input}}, {{$rpc.Output}}]("{{$service.Name}}.{{$rpc.Name}}", ""); err != nil {
+                panic(err)
+            }
+        {{- end }}
+  }
+{{- end }}
+{{- end }}
+
+{{- define "parseMap" -}}
+  {{- range $key, $value := . }}
+    {{- if eq (printf "%T" $value) "map[string]interface {}" }}
+      {{$key}} struct {
+        {{- template "parseMap" $value }}
+      }
+    {{- else if eq (printf "%T" $value) "[]interface {}" }}
+      {{$key}} []{{template "parseType" (index $value 0)}}
+    {{- else }}
+      {{- if eq (printf "%T" $value) "compiler.ByteString" }}
+         {{$key}} string
+      {{- else }}
+        {{$key}} {{(printf "%T" $value)}}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+{{- define "parseType" -}}
+  {{- if eq (printf "%T" .) "map[string]interface {}" -}}
+    struct {
+      {{- template "parseMap" . }}
+    }
+  {{- else if eq (printf "%T" .) "compiler.ByteString" -}}
+    string
+  {{- else -}}
+    {{printf "%T" .}}
+  {{- end -}}
+{{- end }}
+
+{{- define "parseMapValues" -}}
+  {{- range $key, $value := . }}
+    {{- if eq (printf "%T" $value) "map[string]interface {}" }}
+       {{$key}}: struct {
+         {{- template "parseMap" $value }} 
+        } { 
+          {{- template "parseMapValues" $value }} 
+        },
+    {{- else if eq (printf "%T" $value) "[]interface {}" }}
+       {{$key}}: []{{template "parseType" (index $value 0)}}{ 
+          {{- template "parseSliceValues" $value -}}
+       },
+    {{- else }}
+      {{- if eq (printf "%T" $value) "string" }}
+        {{$key}}: "{{$value}}",
+      {{- else if eq (printf "%T" $value) "compiler.ByteString" }}
+        {{$key}}: string({{$value}}),
+      {{- else }}
+        {{$key}}: {{$value}},
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+{{- define "parseSliceValues" -}}
+  {{- range $index, $element := . }}
+    {{- if eq (printf "%T" $element) "map[string]interface {}" }}
+      struct {
+        {{- template "parseMap" $element }}
+      }{
+        {{- template "parseMapValues" $element }}
+      },
+    {{- else if eq (printf "%T" $element) "string" }}
+      "{{$element}}",
+    {{- else if eq (printf "%T" $element) "compiler.ByteString" }}
+      string({{$element}}),
+    {{- else }}
+      {{$element}},
+    {{- end }}
+  {{- end }}
+{{- end }}
