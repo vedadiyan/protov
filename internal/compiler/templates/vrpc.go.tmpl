@@ -2,7 +2,7 @@
 {{- range $service := .Services }}
   func init () {
         {{- range $rpc := $service.Rpcs}}
-            if err := vrpc.RegisterHandler[{{$rpc.Input}}, {{$rpc.Output}}]("{{$service.Name}}.{{$rpc.Name}}", ""); err != nil {
+            if err := vrpc.RegisterHandler[{{$rpc.Input}}, {{$rpc.Output}}]("{{$service.Name}}.{{$rpc.Name}}", {{- if $value := index $rpc.Options "@pattern" }} "{{ $value }}" {{- end }}, {{- if $value := index $rpc.Options "@method" }}  vrpc.WithMethod("{{ $value }}") {{- end }}); err != nil {
                 panic(err)
             }
         {{- end }}
