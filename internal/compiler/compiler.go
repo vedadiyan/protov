@@ -48,7 +48,7 @@ var (
 	_mainTemplate string
 	//go:embed templates/message.go.tmpl
 	_messageTemplate string
-	//go:embed templates/service.gtw.go.tmpl
+	//go:embed templates/vrpc.go.tmpl
 	_serviceTemplate string
 	//go:embed templates/service.imports.go.tmpl
 	_serviceImportsTemplate string
@@ -538,10 +538,10 @@ func (file *File) GetService(n int, service protoreflect.ServiceDescriptor) (*Se
 		return out, nil
 	}
 
-	for i := 0; i < l; i++ {
+	for i := range l {
 		methodDescriptor := methods.Get(i)
 
-		rpc, err := file.GetRpc(fmt.Sprintf(".service[%d].method[%d].options", n, i), string(service.Name()), methodDescriptor)
+		rpc, err := file.GetRpc(n, i, fmt.Sprintf(".service[%d].method[%d].options", n, i), string(service.Name()), methodDescriptor)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get field %s: %w", methodDescriptor.Name(), err)
 		}
@@ -559,7 +559,7 @@ func (file *File) GetService(n int, service protoreflect.ServiceDescriptor) (*Se
 	return out, nil
 }
 
-func (file *File) GetRpc(path string, serviceName string, fd protoreflect.MethodDescriptor) (*Rpc, error) {
+func (file *File) GetRpc(x int, i int, path string, serviceName string, fd protoreflect.MethodDescriptor) (*Rpc, error) {
 	input := fd.Input().Name()
 	output := fd.Output().Name()
 
@@ -567,9 +567,18 @@ func (file *File) GetRpc(path string, serviceName string, fd protoreflect.Method
 		Name:        string(fd.Name()),
 		Input:       string(input),
 		Output:      string(output),
-		Options:     make(map[string]any),
 		ServiceName: serviceName,
 	}
+
+	options := make(map[string]any)
+	if value, ok := file.Comments[fmt.Sprintf(".service[%d].method[%d]", x, i)]; ok {
+		comments := ExpandComments(value)
+		for _, comment := range comments {
+			options[comment[0]] = comment[1]
+		}
+	}
+
+	out.Options = options
 
 	if opts, ok := fd.Options().(*descriptorpb.MethodOptions); ok {
 		proto.RangeExtensions(opts, func(et protoreflect.ExtensionType, a any) bool {
@@ -921,7 +930,7 @@ func ExpandComments(comment string) [][2]string {
 			continue
 		}
 		if strings.HasPrefix(segments[0], "@") {
-			out = append(out, [2]string{segments[0], strings.Join(segments[1:], " ")})
+			out = append(out, [2]string{segments[0], strings.TrimRight(strings.TrimLeft(strings.Join(segments[1:], " "), " "), " ")})
 		}
 	}
 	return out

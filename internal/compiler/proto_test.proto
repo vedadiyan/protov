@@ -1,0 +1,15 @@
+edition = "2023";
+
+package test_package;
+
+message MessageName {
+  string name = 1 [default = "ok"];
+  string country = 2;
+}
+
+service TestService {
+  //@pattern        /Test/:name
+  //@method         GET
+  //@ok             200
+  rpc TestRPC(MessageName) returns (MessageName);
+}
