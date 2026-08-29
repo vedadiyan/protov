@@ -13,6 +13,7 @@ enum Status {
 message MessageName {
   bytes name = 1 [default = "ok"];
   string country = 2;
+  double x = 5 [default = inf];
   Status status = 3 [default = STATUS_FAIL];
 }
 

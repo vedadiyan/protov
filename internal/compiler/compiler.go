@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"maps"
+	"math"
 	"os"
 	"path"
 	"reflect"
@@ -366,6 +367,20 @@ func (file *File) GetField(fd protoreflect.FieldDescriptor) (*Field, error) {
 		case protoreflect.EnumKind:
 			{
 				out.Default = fmt.Sprintf("%s_%s", fieldType, fd.DefaultEnumValue().Name())
+			}
+		case protoreflect.FloatKind, protoreflect.DoubleKind:
+			{
+				f := fd.Default().Float()
+				switch {
+				case math.IsInf(f, 1):
+					out.Default = "math.Inf(1)"
+				case math.IsInf(f, -1):
+					out.Default = "math.Inf(-1)"
+				case math.IsNaN(f):
+					out.Default = "math.NaN()"
+				default:
+					out.Default = fmt.Sprintf("%v", f)
+				}
 			}
 		default:
 			{
