@@ -13,12 +13,10 @@ type {{.Name}} struct {
 {{- end}}
 
 {{- define "MessageMethods"}}
-func (x *{{.Name}}) New() codecs.Reflected {
-    out := new({{.Name}})
+func (x *{{.Name}}) Init() {
     {{- range $index, $f := .Fields }}
-        {{ if $f.HasDefault}} out.{{$f.Name}} = {{$f.Default}} {{ end }}
+        {{ if $f.HasDefault}} x.{{$f.Name}} = {{$f.Default}} {{ end }}
     {{- end}}
-    return out
 }
 
 func (x *{{.Name}}) Type() metadata.Type {

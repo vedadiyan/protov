@@ -97,6 +97,7 @@ return nil
 
 {{- define "DecodeMessage"}}
 value := new({{.BaseType}})
+value.Init()
 if err := protolizer.StaticCodec().UnmarshalFromBuffer(value, buffer); err != nil {
     return err
 }     
