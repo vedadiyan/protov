@@ -103,12 +103,14 @@ type (
 	}
 
 	Rpc struct {
-		Name        string
-		Options     map[string]any
-		Descriptor  string
-		Input       string
-		Output      string
-		ServiceName string
+		Name            string
+		Options         map[string]any
+		Descriptor      string
+		Input           string
+		Output          string
+		ServiceName     string
+		ClientStreaming bool
+		ServerStreaming bool
 	}
 
 	File struct {
@@ -488,11 +490,11 @@ func (file *File) GetServices(md protoreflect.ServiceDescriptors) ([]*Service, e
 	return out, nil
 }
 
-func (file *File) GetService(n int, service protoreflect.ServiceDescriptor) (*Service, error) {
+func (file *File) GetService(serviceIndex int, service protoreflect.ServiceDescriptor) (*Service, error) {
 	methods := service.Methods()
 
 	codeGeneration := make([]string, 0)
-	if value, ok := file.Comments[fmt.Sprintf(".service[%d]", n)]; ok {
+	if value, ok := file.Comments[fmt.Sprintf(".service[%d]", serviceIndex)]; ok {
 		comments := ExpandComments(value)
 		for _, comment := range comments {
 			switch comment[0] {
@@ -541,7 +543,7 @@ func (file *File) GetService(n int, service protoreflect.ServiceDescriptor) (*Se
 	for i := range l {
 		methodDescriptor := methods.Get(i)
 
-		rpc, err := file.GetRpc(n, i, fmt.Sprintf(".service[%d].method[%d].options", n, i), string(service.Name()), methodDescriptor)
+		rpc, err := file.GetRpc(serviceIndex, i, fmt.Sprintf(".service[%d].method[%d].options", serviceIndex, i), string(service.Name()), methodDescriptor)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get field %s: %w", methodDescriptor.Name(), err)
 		}
@@ -559,19 +561,21 @@ func (file *File) GetService(n int, service protoreflect.ServiceDescriptor) (*Se
 	return out, nil
 }
 
-func (file *File) GetRpc(x int, i int, path string, serviceName string, fd protoreflect.MethodDescriptor) (*Rpc, error) {
+func (file *File) GetRpc(serviceIndex int, rpcIndex int, path string, serviceName string, fd protoreflect.MethodDescriptor) (*Rpc, error) {
 	input := fd.Input().Name()
 	output := fd.Output().Name()
 
 	out := &Rpc{
-		Name:        string(fd.Name()),
-		Input:       string(input),
-		Output:      string(output),
-		ServiceName: serviceName,
+		Name:            string(fd.Name()),
+		Input:           string(input),
+		Output:          string(output),
+		ServiceName:     serviceName,
+		ClientStreaming: fd.IsStreamingClient(),
+		ServerStreaming: fd.IsStreamingServer(),
 	}
 
 	options := make(map[string]any)
-	if value, ok := file.Comments[fmt.Sprintf(".service[%d].method[%d]", x, i)]; ok {
+	if value, ok := file.Comments[fmt.Sprintf(".service[%d].method[%d]", serviceIndex, rpcIndex)]; ok {
 		comments := ExpandComments(value)
 		for _, comment := range comments {
 			options[comment[0]] = comment[1]
