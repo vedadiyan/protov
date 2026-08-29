@@ -68,6 +68,8 @@ type (
 		Index         reflect.Kind
 		Key           reflect.Kind
 		FieldNum      int
+		Default       string
+		HasDefault    bool
 	}
 
 	EnumValue struct {
@@ -348,6 +350,29 @@ func (file *File) GetField(fd protoreflect.FieldDescriptor) (*Field, error) {
 		FieldNum:      int(fd.Number()),
 		Optional:      fd.HasOptionalKeyword(),
 		MarshalledTag: marshalTags(fd),
+		HasDefault:    fd.HasDefault(),
+	}
+
+	if fd.HasDefault() {
+		switch fd.Kind() {
+		case protoreflect.StringKind:
+			{
+				out.Default = fmt.Sprintf(`"%v"`, fd.Default().Interface())
+			}
+		case protoreflect.BytesKind:
+			{
+				out.Default = fmt.Sprintf("%#v", fd.Default().Bytes())
+			}
+		case protoreflect.EnumKind:
+			{
+				out.Default = fmt.Sprintf("%s_%s", fieldType, fd.DefaultEnumValue().Name())
+			}
+		default:
+			{
+				out.Default = fmt.Sprintf("%v", fd.Default().Interface())
+			}
+		}
+
 	}
 
 	if isExternalPackage, packageName := getImport(fd); isExternalPackage {

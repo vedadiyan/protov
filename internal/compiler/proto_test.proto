@@ -4,9 +4,16 @@ package test_package;
 
 option go_package = "compiler";
 
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_OK = 1;
+  STATUS_FAIL = 2;
+}
+
 message MessageName {
-  string name = 1 [default = "ok"];
+  bytes name = 1 [default = "ok"];
   string country = 2;
+  Status status = 3 [default = STATUS_FAIL];
 }
 
 service TestService {
